@@ -2,7 +2,14 @@ name: Publish S10 source-only experimental prerelease
 on:
   push:
     branches: ['port/s10-exynos9820']
-    paths: ['.github/workflows/s10-source-prerelease.yml']
+    paths:
+      - '.github/workflows/s10-source-prerelease.yml'
+      - 'docs/S10_PORT_STATUS.md'
+      - 'scripts/internal/s10_framework_audit.py'
+      - 'scripts/tests/test_s10_framework_audit.py'
+      - 'unica/configs/essi.sh'
+      - 'platform/exynos9820/**'
+      - 'target/beyond*/**'
   workflow_dispatch:
 
 permissions:
