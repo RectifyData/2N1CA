@@ -157,7 +157,7 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
         lib = work / "system/system/lib64" / library
         try:
             with lib.open("rb") as stream:
-                if stream.read(5) != b"\\x7fELF\\x02":
+                if stream.read(5) != b"\x7fELF\x02":
                     errors.append(f"E739: invalid 64-bit S10 audio library: {library}")
         except OSError:
             errors.append(f"E739: missing S10 stock audio library: {library}")
