@@ -17,10 +17,10 @@ import zipfile
 from pathlib import Path
 
 TARGETS = {
-    "beyond0lte": {"brand": "Galaxy S10e", "model": "SM-G970F", "fp": "side"},
-    "beyond1lte": {"brand": "Galaxy S10", "model": "SM-G973F", "fp": "ultrasonic"},
-    "beyond2lte": {"brand": "Galaxy S10+", "model": "SM-G975F", "fp": "ultrasonic"},
-    "beyondx": {"brand": "Galaxy S10 5G", "model": "SM-G977B", "fp": "ultrasonic"},
+    "beyond0lte": {"brand": "Galaxy S10e", "model": "SM-G970F", "models": ("SM-G970F", "SM-G970N"), "fp": "side"},
+    "beyond1lte": {"brand": "Galaxy S10", "model": "SM-G973F", "models": ("SM-G973F", "SM-G973N"), "fp": "ultrasonic"},
+    "beyond2lte": {"brand": "Galaxy S10+", "model": "SM-G975F", "models": ("SM-G975F", "SM-G975N"), "fp": "ultrasonic"},
+    "beyondx": {"brand": "Galaxy S10 5G", "model": "SM-G977B", "models": ("SM-G977B", "SM-G977N"), "fp": "ultrasonic"},
 }
 OVERLAY_FILES = ("arrays.xml", "bools.xml", "dimens.xml", "integers.xml", "strings.xml")
 FRAMEWORK_ARCHIVES = (
@@ -123,6 +123,11 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
             errors.append("E736: final camera capability data differs from stock S10")
     if sysprop.get("ro.product.device") != device:
         errors.append(f"E720: system framework device mismatch: {sysprop.get('ro.product.device')!r}")
+    allowed_models = TARGETS[device]["models"]
+    if sysprop.get("ro.product.model") not in allowed_models:
+        errors.append("E737: system framework contains missing or incorrect Galaxy S10 model")
+    if sysprop.get("ro.product.system.model") not in allowed_models:
+        errors.append("E738: system partition still advertises a different device model")
     if sysprop.get("ro.product.system.device", device) != device:
         errors.append("E721: ro.product.system.device mismatches target")
     if vendor.get("ro.product.vendor.device") not in {device, device.removesuffix("lte")}:
