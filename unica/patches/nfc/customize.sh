@@ -8,7 +8,7 @@ TARGET_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$TARGET_FIRMWARE")_$(cut -d "/" 
 # fallback or unrelated S21 library for the S10 devices.
 if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
     S10_NFC_CHIP="$(GET_PROP "vendor" "ro.vendor.nfc.feature.chipname")"
-    if [[ -n "$S10_NFC_CHIP" && "$S10_NFC_CHIP" != "SLSI" ]]; then
+    if [[ -n "$S10_NFC_CHIP" && "$S10_NFC_CHIP" != SLSI* ]]; then
         LOGE "E682: Expected stock S10 SLSI NFC vendor, got '$S10_NFC_CHIP'"
         return 1
     fi
