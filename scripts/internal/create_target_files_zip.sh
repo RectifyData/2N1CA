@@ -141,6 +141,13 @@ fi
 
 if [ -d "$WORK_DIR/kernel" ]; then
     KERNEL_BINS="boot.img dt.img dtbo.img init_boot.img vendor_boot.img"
+    # S10 legacy devices do not have the newer Samsung boot image layout.
+    # Do not package dt/dtbo/init_boot/vendor_boot images from an unrelated donor.
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            KERNEL_BINS="boot.img"
+            ;;
+    esac
 
     for f in $KERNEL_BINS; do
         [ ! -f "$WORK_DIR/kernel/$f" ] && continue
