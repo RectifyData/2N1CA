@@ -17,6 +17,7 @@ REQUIRED = ("build_info.txt", "META-INF/com/android/metadata",
 EXTRACT = re.compile(r'package_extract_file\(\s*"([^"]+)"')
 BLOCK = re.compile(r'block_image_update\(\s*[^,]+,\s*package_extract_file\(\s*"([^"]+)"\s*\),\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)')
 WRITE = re.compile(r'package_extract_file\(\s*"([^"]+)"\s*,\s*"(/dev/block/[^"]+)"\s*\)')
+BLOCK_DEST = re.compile(r'block_image_update\(\s*"(/dev/block/[^"]+)"\s*,\s*package_extract_file\(\s*"([^"]+)"\s*\)')
 
 
 def properties(raw):
@@ -190,6 +191,18 @@ def validate(path, expected=None, deep=False, layout=None):
                 for payload, destination in WRITE.findall(script):
                     if destination.rstrip("/").split("/")[-1] not in S10_IMAGES:
                         error("E523", f"Unsafe write: {payload} to {destination}")
+                # A transfer filename called "system" is not proof that the
+                # updater writes to /dev/block/by-name/system.
+                # Check the real first argument to every block_image_update.
+                destinations = BLOCK_DEST.findall(script)
+                operations = BLOCK.findall(script)
+                if len(destinations) != len(operations):
+                    error("E543", "Unverified or dynamic block update destination")
+                for destination, transfer in destinations:
+                    destpart = destination.rstrip("/").split("/")[-1].lower()
+                    transferpart = transfer.removesuffix(".transfer.list")
+                    if destpart not in S10_SYSTEM or destpart != transferpart:
+                        error("E544", f"Unsafe OTA write: {transfer} to {destination}")
                 if "ro.product.device" not in script and "ro.boot.em.model" not in script:
                     error("E524", "S10 installer has no device assertion")
                 for operation in ("mark_header_bt(", "write_data_bt(", "format(\"/data",
