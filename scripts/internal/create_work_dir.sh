@@ -35,12 +35,22 @@ COPY_SOURCE_FIRMWARE()
                         return 1
                     fi
                     STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.model")"
-                    SET_PROP "system" "ro.product.device" "$TARGET_CODENAME"
-                    SET_PROP "system" "ro.product.system.device" "$TARGET_CODENAME"
-                    if [ -n "$STOCK_MODEL" ]; then
-                        SET_PROP "system" "ro.product.model" "$STOCK_MODEL"
-                        SET_PROP "system" "ro.product.system.model" "$STOCK_MODEL"
+                    if [ -z "$STOCK_MODEL" ]; then
+                        STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.model")"
                     fi
+                    if [ -z "$STOCK_MODEL" ]; then
+                        STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/build.prop" "ro.product.model")"
+                    fi
+                    # Empty properties must never leave the One UI donor's S25
+                    # model baked into the S10 framework image.
+                    if [ -z "$STOCK_MODEL" ] || [[ ":$TARGET_ASSERT_MODEL:" != *":$STOCK_MODEL:"* ]]; then
+                        LOGE "E661: S10 stock model is missing or not on the target model allowlist"
+                        return 1
+                    fi
+                    SET_PROP "system" "ro.product.device" "$TARGET_CODENAME" || return 1
+                    SET_PROP "system" "ro.product.system.device" "$TARGET_CODENAME" || return 1
+                    SET_PROP "system" "ro.product.model" "$STOCK_MODEL" || return 1
+                    SET_PROP "system" "ro.product.system.model" "$STOCK_MODEL" || return 1
                 else
                     SET_PROP "system" "ro.product.device" "$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/odm/etc/build.prop" "ro.product.odm.device")"
                 fi
