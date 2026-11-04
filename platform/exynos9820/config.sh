@@ -3,8 +3,10 @@
 # Target-specific values are applied afterward.
 TARGET_PLATFORM_SDK_VERSION=31
 TARGET_PRODUCT_SHIPPING_API_LEVEL=28
-# Stock Android 12 vendor requires VNDK 31; do not confuse with launch API 28.
-TARGET_BOARD_API_LEVEL=31
+# Galaxy S10 launched on API 28, then upgraded stock vendor to VNDK 31.
+# Board API defaults to launch API until verified against firmware.
+TARGET_BOARD_API_LEVEL=28
+TARGET_VNDK_VERSION=31
 TARGET_USE_DYNAMIC_PARTITIONS=false
 TARGET_OS_SINGLE_SYSTEM_IMAGE="essi"
 TARGET_OS_FILE_SYSTEM_TYPE="ext4"
