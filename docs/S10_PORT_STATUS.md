@@ -100,6 +100,18 @@ developer artifact, **not a validated Galaxy S10 ROM**.
 
 These checks do **not** make ART, APEX, HIDL/AIDL, RIL, camera, audio, graphics, fingerprint, Bluetooth or NFC work at runtime. They detect mismatches in available source and images. Firmware extraction, dependency resolution, and physical-device testing are still outstanding.
 
+## Non-flashable integration build route
+
+The new `--target-files-only` mode compiles the framework and produces a
+target-files archive for inspection without requiring the boot-image safety
+marker. It cannot be installed via recovery. On the manual S10 GitHub Actions
+workflow, select `target-files` instead of `build` for this stage.
+
+The experimental Exynos 9820 kernel build workflow has also been started.
+Compilation and a valid Android boot-image header cannot establish that
+a Galaxy S10 will reach the lock screen. None of this constitutes physical
+boot evidence.
+
 ## Remaining blockers
 
 1. Obtain per-variant stock PIT/firmware data and compare with the *actual*
