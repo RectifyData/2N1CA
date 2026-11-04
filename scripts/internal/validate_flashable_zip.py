@@ -9,7 +9,8 @@ from pathlib import Path, PurePosixPath
 
 S10 = {"beyond0lte", "beyond1lte", "beyond2lte", "beyondx"}
 S10_SYSTEM = {"system", "vendor", "product", "odm"}
-S10_IMAGES = S10_SYSTEM | {"boot", "dt", "dtbo"}
+# Until separate DT/DTBO partition names and sizes are confirmed, only boot is flashable.
+S10_IMAGES = S10_SYSTEM | {"boot"}
 REQUIRED = ("build_info.txt", "META-INF/com/android/metadata",
             "META-INF/com/google/android/update-binary",
             "META-INF/com/google/android/updater-script")
