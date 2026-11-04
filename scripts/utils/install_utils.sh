@@ -177,7 +177,14 @@ PRINT_HEADER()
     echo    'ui_print(" ");'
     PRINT_SEPARATOR
     echo -n 'ui_print("'
-    echo -n "UN1CA $ROM_VERSION for $TARGET_NAME"
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            echo -n "2N1CA $ROM_VERSION for $TARGET_NAME"
+            ;;
+        *)
+            echo -n "UN1CA $ROM_VERSION for $TARGET_NAME"
+            ;;
+    esac
     echo    '");'
     echo    'ui_print("Coded by salvo_giangri @XDAforums");'
     PRINT_SEPARATOR
