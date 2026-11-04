@@ -23,7 +23,25 @@ COPY_SOURCE_FIRMWARE()
                 LOG_STEP_OUT
             elif [[ "$f" == "system" ]]; then
                 LOG_STEP_IN
-                SET_PROP "system" "ro.product.device" "$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/odm/etc/build.prop" "ro.product.odm.device")"
+                if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+                    # Do not stamp Galaxy S22 donor identity into S10 framework properties.
+                    # Cross-check the actual stock vendor device before setting S10 identity.
+                    local STOCK_DEVICE STOCK_MODEL
+                    STOCK_DEVICE="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")"
+                    if [[ "$STOCK_DEVICE" != "$TARGET_CODENAME" ]]; then
+                        LOGE "E660: target stock vendor identifies as '$STOCK_DEVICE', expected '$TARGET_CODENAME'"
+                        return 1
+                    fi
+                    STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.model")"
+                    SET_PROP "system" "ro.product.device" "$TARGET_CODENAME"
+                    SET_PROP "system" "ro.product.system.device" "$TARGET_CODENAME"
+                    if [ -n "$STOCK_MODEL" ]; then
+                        SET_PROP "system" "ro.product.model" "$STOCK_MODEL"
+                        SET_PROP "system" "ro.product.system.model" "$STOCK_MODEL"
+                    fi
+                else
+                    SET_PROP "system" "ro.product.device" "$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/odm/etc/build.prop" "ro.product.odm.device")"
+                fi
                 LOG_STEP_OUT
             fi
         else
