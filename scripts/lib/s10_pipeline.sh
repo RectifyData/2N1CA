@@ -53,8 +53,9 @@ s10_require_pit_layout() {
     s10_die "No valid PIT checksum found"
   for key in SYSTEM VENDOR PRODUCT ODM BOOT; do
     value="TARGET_${key}_PARTITION_SIZE"
-    [[ "${!value:-}" =~ ^[0-9]+$ ]] && (( ${!value} > 0 )) ||
+    if [[ ! "${!value:-}" =~ ^[0-9]+$ ]] || (( ${!value:-0} <= 0 )); then
       s10_die "Unverified partition size: $value; aborting before image build"
+    fi
   done
   s10_info "PIT-derived capacities validated for $device; physical device still untested"
 }
