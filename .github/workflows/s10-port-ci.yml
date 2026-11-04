@@ -10,6 +10,10 @@ on:
       - '.github/workflows/s10-port-ci.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   s10-config:
     runs-on: ubuntu-24.04
