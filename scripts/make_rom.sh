@@ -171,6 +171,16 @@ if $BUILD_ROM; then
             --work-dir "$WORK_DIR" \
             --stock-target "$FW_DIR/$TARGET_FIRMWARE_PATH" \
             --json-out "$OUT_DIR/target/$TARGET_CODENAME/framework-audit.json" || exit 1
+        # Compare the actual Android 16 framework HAL contract with the
+        # extracted Exynos9820 stock vendor and ODM. No synthetic PASS.
+        S10_VINTF_ARGS=()
+        if [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+            S10_VINTF_ARGS=(--require-tool)
+        fi
+        python3 "$SRC_DIR/scripts/internal/s10_checkvintf.py" \
+            --work-dir "$WORK_DIR" \
+            --report "$OUT_DIR/target/$TARGET_CODENAME/checkvintf.json" \
+            "${S10_VINTF_ARGS[@]}" || exit 1
         LOG_STEP_OUT
     fi
 
