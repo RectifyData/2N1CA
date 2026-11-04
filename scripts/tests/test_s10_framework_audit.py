@@ -74,5 +74,24 @@ class S10FrameworkTests(unittest.TestCase):
             self.assertTrue(any("E734" in x for x in errors), errors)
 
 
+    def test_donor_camera_data_cannot_replace_stock_s10_camera_data(self):
+        with tempfile.TemporaryDirectory() as root:
+            root_path = Path(root)
+            stock = root_path / "stock"
+            work = root_path / "work"
+            relative = "system/system/cameradata/camera-feature.xml"
+            stock_file = stock / relative
+            current = work / relative
+            stock_file.parent.mkdir(parents=True, exist_ok=True)
+            current.parent.mkdir(parents=True, exist_ok=True)
+            stock_file.write_text("<resources><local name='S10' /></resources>")
+            current.write_text("<resources><local name='S22' /></resources>")
+            errors = AUDIT.workdir_audit(work, "beyond2lte", stock)
+            self.assertTrue(any("E736" in x for x in errors), errors)
+            current.write_bytes(stock_file.read_bytes())
+            errors = AUDIT.workdir_audit(work, "beyond2lte", stock)
+            self.assertFalse(any("E735" in x or "E736" in x for x in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()
