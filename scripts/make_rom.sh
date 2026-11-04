@@ -162,6 +162,17 @@ if $BUILD_ROM; then
 
     BUILD_APKS
 
+    # Verify S10 framework archives, product overlays, vendor identity and
+    # VINTF after APK rebuilding; reject failed builds before caching outputs.
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+        LOG_STEP_IN true "Verifying S10 framework, overlays and VINTF"
+        python3 "$SRC_DIR/scripts/internal/s10_framework_audit.py" \
+            --source "$SRC_DIR" --device "$TARGET_CODENAME" \
+            --work-dir "$WORK_DIR" \
+            --json-out "$OUT_DIR/target/$TARGET_CODENAME/framework-audit.json" || exit 1
+        LOG_STEP_OUT
+    fi
+
     echo -n "$(GET_WORK_DIR_HASH)" > "$WORK_DIR/.completed"
 fi
 
