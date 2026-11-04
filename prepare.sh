@@ -15,6 +15,11 @@ for script in "$ROOT/prepare.sh" "$ROOT/download.sh" "$ROOT/build.sh" "$ROOT/ver
   [[ -f "$script" ]] || s10_die "Required pipeline script absent: $script"
   bash -n "$script" || s10_die "Shell syntax failure: $script"
 done
+s10_info "Checking external source submodules"
+if command -v git >/dev/null 2>&1 && [[ -d "$ROOT/.git" ]]; then
+  git -C "$ROOT" submodule update --init --recursive ||
+    s10_die "Cannot initialize required build submodules"
+fi
 s10_info "Building required host tools (reuses already-built dependencies)"
 bash "$ROOT/scripts/build_dependencies.sh" || s10_die "Host tool build failed"
 s10_env "$DEVICE"
