@@ -5,6 +5,34 @@ fi
 
 # [
 ADD_TARGET_VNDK_APEX() {
+    # An Exynos 9820 target must use its own Android 12 VNDK, not the
+    # unrelated Qualcomm/A-series fallback previously used for API 31.
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+        if [[ "$TARGET_BOARD_API_LEVEL" != "31" ]]; then
+            ABORT "E674: unsupported Exynos9820 VNDK level $TARGET_BOARD_API_LEVEL"
+        fi
+        local firmware_path source_apex candidate
+        firmware_path="$(cut -d / -f 1 <<< "$TARGET_FIRMWARE")_$(cut -d / -f 2 <<< "$TARGET_FIRMWARE")"
+        source_apex=""
+        for candidate in \
+            "$FW_DIR/$firmware_path/system_ext/apex/com.android.vndk.v31.apex" \
+            "$FW_DIR/$firmware_path/system/system/system_ext/apex/com.android.vndk.v31.apex" \
+            "$FW_DIR/$firmware_path/system/system_ext/apex/com.android.vndk.v31.apex" \
+            "$FW_DIR/$firmware_path/system/system/apex/com.android.vndk.v31.apex"; do
+            if [[ -s "$candidate" ]]; then source_apex="$candidate"; break; fi
+        done
+        if [[ -z "$source_apex" ]]; then
+            ABORT "E675: Missing S10 stock VNDK 31 APEX; refusing Qualcomm substitute"
+        fi
+        if ! python3 -c 'import sys,zipfile; sys.exit(0 if zipfile.is_zipfile(sys.argv[1]) else 1)' "$source_apex"; then
+            ABORT "E676: S10 stock VNDK APEX is corrupt or unsupported"
+        fi
+        mkdir -p "$SYS_EXT_DIR/apex" || return 1
+        cp -a "$source_apex" "$SYS_EXT_DIR/apex/com.android.vndk.v31.apex" || return 1
+        SET_METADATA "system_ext" "apex/com.android.vndk.v31.apex" 0 0 644 "u:object_r:system_file:s0" || return 1
+        LOG "- Installed Exynos 9820 stock VNDK v31 from matching device firmware"
+        return 0
+    fi
     case "$TARGET_BOARD_API_LEVEL" in
         "30")
             ADD_TO_WORK_DIR "a73xqxx" "system_ext" "apex/com.android.vndk.v30.apex" 0 0 644 "u:object_r:system_file:s0"
