@@ -70,3 +70,11 @@ TARGET_WLAN_SUPPORT_MOBILEAP_WIFISHARING_LITE=false
 TARGET_WLAN_SUPPORT_SWITCH_FOR_INDIVIDUAL_APPS=true
 TARGET_WLAN_SUPPORT_TWT_CONTROL=false
 TARGET_WLAN_SUPPORT_WIFI_TO_CELLULAR=false
+
+# PIT capacity values are generated from the matching stock CSC archive.
+# On fresh checkouts they do not exist; that is expected. Never guess sizes.
+if [ -n "${OUT_DIR:-}" ] && [ -n "${TARGET_CODENAME:-}" ] && \
+   [ -f "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" ]; then
+    # shellcheck source=/dev/null
+    source "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env"
+fi
