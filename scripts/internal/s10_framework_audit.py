@@ -62,6 +62,9 @@ def assignment(content: str, key: str) -> str:
 def static_audit(source: Path, device: str) -> list[str]:
     errors: list[str] = []
     profile = TARGETS[device]
+    shared = source / "platform/exynos9820/config.sh"
+    if not shared.is_file() or assignment(shared.read_text(), "TARGET_VNDK_VERSION") != "31":
+        errors.append("E713: Exynos9820 must use stock Android 12 VNDK version 31")
     directory = source / "target" / device
     config = directory / "config.sh"
     feature = directory / "sff.sh"
@@ -121,6 +124,9 @@ def workdir_audit(work: Path, device: str) -> list[str]:
     vendor_sdk = vendor.get("ro.build.version.sdk", "")
     if vendor_sdk and vendor_sdk != "31":
         errors.append(f"E732: unexpected stock Exynos9820 vendor SDK {vendor_sdk}")
+    vendor_vndk = vendor.get("ro.vndk.version", "")
+    if vendor_vndk and vendor_vndk != "31":
+        errors.append(f"E733: S10 stock vendor requires VNDK 31, found {vendor_vndk}")
     for relative in FRAMEWORK_ARCHIVES:
         p = work / relative
         if not p.is_file() or not zipfile.is_zipfile(p):
