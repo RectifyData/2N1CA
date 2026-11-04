@@ -317,7 +317,8 @@ fi
 case "$TARGET_CODENAME" in
     beyond0lte|beyond1lte|beyond2lte|beyondx)
         if ! python3 "$SRC_DIR/scripts/internal/validate_flashable_zip.py" \
-            "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" --deep; then
+            "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" \
+            --layout "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" --deep; then
             LOGE "Produced ZIP failed S10 installer validation; refusing to publish"
             rm -f "$OUTPUT_FILE"
             exit 1
