@@ -41,4 +41,12 @@ fi
 s10_info "Extracting downloaded firmware for $DEVICE"
 "$ROOT/scripts/extract_fw.sh" "${options[@]}" ||
   s10_die "Firmware extraction failed; check storage, tar integrity and mount permissions"
+# The upstream firmware downloader normally selects the newest FUS release.
+# Verify the actual extracted firmware, never assume it remained One UI 8.5.
+donor_model="${SOURCE_FIRMWARE%%/*}"
+donor_rest="${SOURCE_FIRMWARE#*/}"
+donor_region="${donor_rest%%/*}"
+donor_prop="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
+python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_prop" ||
+  s10_die "Donor is not Android 16 / One UI 8.5. Provide a pinned compatible firmware archive."
 s10_info "Firmware prepared for $DEVICE"
