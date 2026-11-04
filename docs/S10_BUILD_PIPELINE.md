@@ -29,6 +29,15 @@ Supported target names: `beyond0lte` (S10e), `beyond1lte` (S10),
   references, payload presence, ZIP CRCs, forbidden S10 partition operations,
   and writes `.sha256` beside the validated ZIP.
 
+For a **non-flashable framework compilation** (no validated boot image
+required), use `./build.sh beyond2lte --target-files-only`. This still needs
+authorized One UI 8.5 donor firmware, matching S10 stock firmware, usable
+partition sizes, host dependencies, and a complete framework/VINTF patch
+set. It creates *target-files*, not a recovery installer. GitHub Actions
+`s10-build.yml` exposes this as `mode: target-files` and labels any artifact
+**DO-NOT-FLASH**. The normal flashable build remains blocked until kernel
+and recovery compatibility have been independently established.
+
 For automated CI, the lightweight
 `.github/workflows/s10-installer-checks.yml` runs tests without requiring
 firmware downloads or accessing a real phone.
