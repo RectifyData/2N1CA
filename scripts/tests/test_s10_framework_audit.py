@@ -92,6 +92,29 @@ class S10FrameworkTests(unittest.TestCase):
             errors = AUDIT.workdir_audit(work, "beyond2lte", stock)
             self.assertFalse(any("E735" in x or "E736" in x for x in errors), errors)
 
+    def test_wrong_audio_gpu_assets_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            errors = AUDIT.workdir_audit(Path(root), "beyond2lte")
+            self.assertTrue(any("E739" in problem for problem in errors), errors)
+            self.assertTrue(any("E740" in problem for problem in errors), errors)
+
+    def test_stock_elf64_audio_and_gpu_apks_pass_asset_checks(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            for name in ("lib_SoundBooster_ver1000.so",
+                         "libsamsungSoundbooster_plus_legacy.so"):
+                target = work / "system/system/lib64" / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"\\x7fELF\\x02" + b"synthetic")
+            for name in ("GameDriver-EX9820", "DevGPUDriver-EX9820"):
+                target = work / "system/system/priv-app" / name / f"{name}.apk"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(target, "w") as z:
+                    z.writestr("AndroidManifest.xml", b"synthetic")
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertFalse(any("E739" in problem or "E740" in problem
+                                 for problem in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()
