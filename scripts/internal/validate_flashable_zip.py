@@ -203,6 +203,15 @@ def validate(path, expected=None, deep=False, layout=None):
                     transferpart = transfer.removesuffix(".transfer.list")
                     if destpart not in S10_SYSTEM or destpart != transferpart:
                         error("E544", f"Unsafe OTA write: {transfer} to {destination}")
+                # Generated S10 full-OTAs only need block writes, boot extraction,
+                # assertions and progress UI. Reject arbitrary shell execution or
+                # extra partition modification commands in custom Edify snippets.
+                extra_ops = re.findall(
+                    r'\b(run_program|apply_patch|format|mount|unmount|delete|'
+                    r'delete_recursive|write_raw_image|set_metadata|set_perm)\s*\(',
+                    script)
+                if extra_ops:
+                    error("E545", f"Unapproved S10 updater operation(s): {sorted(set(extra_ops))}")
                 if "ro.product.device" not in script and "ro.boot.em.model" not in script:
                     error("E524", "S10 installer has no device assertion")
                 for operation in ("mark_header_bt(", "write_data_bt(", "format(\"/data",
