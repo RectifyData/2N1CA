@@ -10,6 +10,12 @@ MODE="${2:-}"
 [[ -z "$MODE" || "$MODE" == "--force" ]] || s10_die "Unknown argument: $MODE"
 s10_require_target "$DEVICE"
 s10_env "$DEVICE"
+# Never fetch an Android 16 donor using inherited S22 credentials or a
+# made-up S25 FE identifier. The firmware ID is supplied as a CI secret.
+[[ "$SOURCE_FIRMWARE" == SM-S731B/* ]] ||
+  s10_die "E631: Expected S25 FE donor SM-S731B, got a different model"
+[[ "$SOURCE_FIRMWARE" != */UNCONFIGURED ]] ||
+  s10_die "E632: Set S10_ONEUI_85_SOURCE_FIRMWARE to a verified S25 FE firmware ID"
 bash "$ROOT/scripts/build_dependencies.sh" --check-tools ||
   s10_die "Host tools absent; run ./prepare.sh $DEVICE first"
 options=()
