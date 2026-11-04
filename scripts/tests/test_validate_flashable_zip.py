@@ -83,6 +83,12 @@ class InstallerZipTests(unittest.TestCase):
             "META-INF/com/google/android/updater-script": dangerous.encode()
         }))
 
+    def test_arbitrary_shell_execution_is_forbidden(self):
+        malicious = INSTALLER + 'run_program("/sbin/sh", "-c", "true");'
+        self.assertIn("E545", self.check(extras={
+            "META-INF/com/google/android/updater-script": malicious.encode()
+        }))
+
     def test_protected_efs_write_rejected(self):
         self.assertIn("E523", self.check(extras={
             "META-INF/com/google/android/updater-script": (
