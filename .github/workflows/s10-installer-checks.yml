@@ -1,0 +1,67 @@
+name: S10 installer and pipeline checks
+on:
+  push:
+    branches:
+      - 'fix/s10-installer-diagnostics'
+    paths:
+      - 'prepare.sh'
+      - 'download.sh'
+      - 'build.sh'
+      - 'verify.sh'
+      - 'scripts/lib/**'
+      - 'scripts/internal/validate_flashable_zip.py'
+      - 'scripts/tests/**'
+      - '.github/workflows/s10-installer-checks.yml'
+      - 'scripts/make_rom.sh'
+  pull_request:
+    paths:
+      - 'prepare.sh'
+      - 'download.sh'
+      - 'build.sh'
+      - 'verify.sh'
+      - 'scripts/lib/**'
+      - 'scripts/internal/validate_flashable_zip.py'
+      - 'scripts/tests/**'
+      - '.github/workflows/s10-installer-checks.yml'
+      - 'scripts/make_rom.sh'
+  workflow_dispatch:
+
+jobs:
+  offline-installer-tests:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Bash scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh scripts/make_rom.sh; do
+            bash -n "$f"
+          done
+      - name: Lint entry-point scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          shellcheck -e SC1090,SC1091 prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh
+      - name: Python syntax and synthetic recovery ZIP tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/internal/validate_flashable_zip.py scripts/tests/test_validate_flashable_zip.py
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Reject unsupported model before attempting firmware downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          if bash build.sh totally-unknown-model; then
+            echo 'FAIL: S10 target restriction did not trigger' >&2
+            exit 1
+          fi
+      - name: Explain limits
+        run: |
+          echo 'Offline tests validate ZIP structure, not bootability or hardware.'
+          echo 'No firmware images are downloaded or flashed by these tests.'
