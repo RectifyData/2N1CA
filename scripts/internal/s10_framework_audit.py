@@ -152,6 +152,19 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
     if not any((work / p).is_file() and zipfile.is_zipfile(work / p)
                for p in SYSTEM_UI_PATHS):
         errors.append("E725: system UI APK is missing or corrupt")
+    # These must come from the matching Exynos9820 system, never the S25 donor.
+    for library in ("lib_SoundBooster_ver1000.so", "libsamsungSoundbooster_plus_legacy.so"):
+        lib = work / "system/system/lib64" / library
+        try:
+            with lib.open("rb") as stream:
+                if stream.read(5) != b"\\x7fELF\\x02":
+                    errors.append(f"E739: invalid 64-bit S10 audio library: {library}")
+        except OSError:
+            errors.append(f"E739: missing S10 stock audio library: {library}")
+    for app in ("GameDriver-EX9820", "DevGPUDriver-EX9820"):
+        apk = work / "system/system/priv-app" / app / f"{app}.apk"
+        if not apk.is_file() or not zipfile.is_zipfile(apk):
+            errors.append(f"E740: Exynos9820 driver APK missing or corrupt: {app}")
     # Thermal policy names must have matching assets in the actual final
     # SamsungDeviceHealthManagerService APK. Never substitute S22 thermal data.
     target_config = (Path(__file__).resolve().parents[2] / "target" / device / "config.sh")
