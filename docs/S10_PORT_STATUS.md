@@ -170,3 +170,32 @@ mismatched bootloader model is never ignored.
 - None of the four variants has a demonstrated first boot or a hardware
   regression pass. Do not download this prerelease for flashing on a daily
   driver or only phone.
+
+## November 4 — additional framework and kernel integration audit
+
+- The pinned experimental Exynos9820 kernel workflow **compiled successfully** for
+  `beyond2lte` on GitHub Actions (run 41921304830). This only establishes that
+  the source builds and boot image header exists; it does not prove compatible
+  Android 16 init, display, drivers or a completed boot. Artifacts remain DO-NOT-FLASH.
+- Removed a contradictory duplicate One UI donor profile from `essi.sh`.
+- Fixed framework VINTF handling: the Android 12 S10 system manifest must not
+  replace Android 16 framework HAL registrations. The Android 16 source system
+  manifest is retained while the S10 vendor manifest remains stock-derived.
+- Added `scripts/internal/s10_checkvintf.py`, which invokes Android's official
+  `checkvintf --check-compat` against the assembled system, vendor, product, ODM
+  and system_ext partition tree. The command's absence is allowed only for
+  *non-flashable* development output. An actual flashable candidate requires
+  the checker and a successful compatibility result. The runner does not
+  emulate a device kernel.
+- Added `scripts/internal/s10_init_audit.py` to resolve vendor/ODM init
+  service executable paths against the merged ROM after patching. Missing
+  declared vendor binaries block image packaging instead of causing a runtime
+  service-start failure to go unnoticed.
+- Added post-compression Brotli integrity checks for full-OTA block payloads
+  prior to discarding their uncompressed bytes. These checks reduce packaging
+  failures but cannot prevent every recovery-side installation failure.
+
+**Still missing:** Actual One UI 8.5 donor firmware extraction and APK/DEX
+compatibility verification, complete Exynos 9820 hardware service adaptations,
+VTS and SELinux validation, flash-safe kernel/ramdisk evidence, and a physical
+boot. The ROM remains source-stage experimental.
