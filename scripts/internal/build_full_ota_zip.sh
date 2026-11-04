@@ -278,6 +278,12 @@ for p in $PARTITIONS_LIST; do
         LOG "- Compressing $p.new.dat"
         # https://android.googlesource.com/platform/build/+/refs/tags/android-15.0.0_r1/tools/releasetools/common.py#3585
         EVAL "brotli --quality=6 --output=\"$TMP_DIR/$p.new.dat.br\" \"$TMP_DIR/$p.new.dat\"" || exit 1
+        # A ZIP CRC validates only the container, not the Brotli stream.
+        # Check Brotli's internal integrity before removing the raw data.
+        if ! brotli --test "$TMP_DIR/$p.new.dat.br"; then
+            LOGE "E527: $p.new.dat.br failed Brotli integrity check"
+            exit 1
+        fi
         rm -f "$TMP_DIR/$p.new.dat"
     fi
 done
