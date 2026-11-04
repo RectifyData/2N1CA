@@ -134,6 +134,9 @@ class InstallerZipTests(unittest.TestCase):
         )
         self.assertIn("E540", problems)
 
+    def test_unverified_dtbo_partition_is_rejected(self):
+        self.assertIn("E522", self.check(extras={"dtbo.img": b"unverified"}))
+
     def test_boot_image_exceeding_pit_is_rejected(self):
         problems = self.check(layout=self.make_layout(boot=4096),
                               extras={"boot.img": b"x" * 8192})
