@@ -2,6 +2,7 @@
 """Reject malformed or dangerous recovery ZIPs before distribution."""
 import argparse
 import re
+import struct
 import sys
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -22,7 +23,88 @@ def properties(raw):
                 if "=" in line and not line.startswith("#"))
 
 
-def validate(path, expected=None, deep=False):
+def parse_layout(path):
+    """Load sizes from the PIT-generated allowlist, never execute a shell file."""
+    sizes = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        found = re.fullmatch(r"TARGET_(SYSTEM|VENDOR|PRODUCT|ODM|BOOT)_PARTITION_SIZE=([0-9]+)", line)
+        if found:
+            name, raw = found.groups()
+            if name in sizes:
+                raise ValueError(f"Duplicate partition capacity: {name}")
+            size = int(raw)
+            if size <= 0 or size % 4096 != 0:
+                raise ValueError(f"Unaligned or invalid partition capacity: {name}={size}")
+            sizes[name] = size
+        elif not re.fullmatch(r'S10_(SOURCE_PIT|TARGET_FIRMWARE)_SHA256="[0-9a-f]{64}"', line):
+            raise ValueError(f"Unknown field in stock PIT layout: {line[:64]}")
+    if set(sizes) != {"SYSTEM", "VENDOR", "PRODUCT", "ODM", "BOOT"}:
+        raise ValueError("Stock PIT layout must contain all five allowed partitions")
+    return sizes
+
+
+def parse_ranges(text, capacity_blocks=None):
+    """Parse Android sdat range set, first token gives number of endpoints."""
+    try:
+        values = [int(v) for v in text.split(",")]
+        if len(values) < 3 or values[0] == 0 or values[0] != len(values) - 1 or values[0] % 2:
+            raise ValueError("invalid number of range endpoints")
+        previous = 0
+        total = 0
+        for start, end in zip(values[1::2], values[2::2]):
+            if start < previous or end <= start or start < 0:
+                raise ValueError("unordered/empty transfer range")
+            if capacity_blocks is not None and end > capacity_blocks:
+                raise ValueError(f"transfer exceeds partition capacity ({end} > {capacity_blocks})")
+            total += end - start
+            previous = end
+        return total
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid transfer range set: {exc}") from exc
+
+
+def inspect_transfers(archive, filenames, capacities, error):
+    for partition in sorted({f[:-len(".transfer.list")] for f in filenames
+                             if f.endswith(".transfer.list")}):
+        name = f"{partition}.transfer.list"
+        try:
+            lines = [line.strip() for line in archive.read(name).decode("ascii").splitlines()
+                     if line.strip()]
+            if len(lines) < 4 or not all(v.isdecimal() for v in lines[:4]):
+                raise ValueError("missing or corrupt sdat header")
+            version, total_blocks, _, _ = map(int, lines[:4])
+            if version not in (3, 4):
+                raise ValueError(f"unsupported sdat version {version}")
+            if total_blocks < 0:
+                raise ValueError("negative block count")
+            limit = None if capacities is None else capacities[partition.upper()] // 4096
+            new_blocks = 0
+            for command in lines[4:]:
+                opcode, *arguments = command.split()
+                if opcode not in ("new", "zero", "erase"):
+                    raise ValueError(f"unsupported full-OTA transfer operation {opcode!r}")
+                if len(arguments) != 1:
+                    raise ValueError(f"invalid operand count for {opcode}")
+                count = parse_ranges(arguments[0], limit)
+                if opcode == "new":
+                    new_blocks += count
+            if new_blocks > total_blocks:
+                raise ValueError(f"new blocks exceed header count {total_blocks}")
+            raw = f"{partition}.new.dat"
+            # For an uncompressed payload the declared new ranges must exactly
+            # match bytes to be written. Empty headers are used in synthetic tests.
+            if raw in filenames and new_blocks:
+                length = archive.getinfo(raw).file_size
+                if length != new_blocks * 4096:
+                    raise ValueError(f"uncompressed payload bytes {length} != {new_blocks * 4096}")
+        except (ValueError, UnicodeError, KeyError) as exc:
+            error("E540", f"{partition} transfer validation: {exc}")
+
+
+def validate(path, expected=None, deep=False, layout=None):
     problems = []
     def error(code, message):
         problems.append(f"{code}: {message}")
@@ -81,6 +163,19 @@ def validate(path, expected=None, deep=False):
                 error("E514", "ZIP contains block payloads without a block updater")
 
             if device in S10:
+                capacities = None
+                if layout is not None:
+                    try:
+                        capacities = parse_layout(Path(layout))
+                    except (OSError, ValueError) as exc:
+                        error("E541", f"Invalid or missing source PIT capacity manifest: {exc}")
+                if capacities is not None:
+                    for name in files:
+                        if name.endswith(".img") and "/" not in name:
+                            partition = name[:-4].upper()
+                            if partition in capacities and z.getinfo(name).file_size > capacities[partition]:
+                                error("E542", f"{name} larger than PIT partition capacity")
+                inspect_transfers(z, files, capacities, error)
                 if ("dynamic_partitions_op_list" in files
                         or "update_dynamic_partitions(" in script
                         or "super.img" in files):
@@ -114,8 +209,9 @@ def main():
     p.add_argument("zip", type=Path)
     p.add_argument("--expected-device")
     p.add_argument("--deep", action="store_true")
+    p.add_argument("--layout", type=Path, help="PIT-generated partition size manifest")
     args = p.parse_args()
-    problems = validate(args.zip, args.expected_device, args.deep)
+    problems = validate(args.zip, args.expected_device, args.deep, args.layout)
     for problem in problems:
         print(f"2N1CA installer validation failed [{problem}]", file=sys.stderr)
     if problems:
