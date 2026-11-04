@@ -38,6 +38,9 @@ if [[ "$MODE" == "--target-files-only" ]]; then
   done
   s10_info "Target-files archive validated (NOT FLASHABLE, NO BOOT TEST)"
 else
+  # A flashable candidate must pass the host AOSP checkvintf compatibility
+  # checker. Merely having well-formed XML is not sufficient.
+  export S10_REQUIRE_VINTF=true
   "$ROOT/scripts/make_rom.sh" --force --build-rom-zip ||
     s10_die "ROM packaging failed; no release candidate should be published"
   s10_info "Step 4/4: validate the built flashable ZIP"
