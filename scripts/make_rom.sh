@@ -169,6 +169,7 @@ if $BUILD_ROM; then
         python3 "$SRC_DIR/scripts/internal/s10_framework_audit.py" \
             --source "$SRC_DIR" --device "$TARGET_CODENAME" \
             --work-dir "$WORK_DIR" \
+            --stock-target "$FW_DIR/$TARGET_FIRMWARE_PATH" \
             --json-out "$OUT_DIR/target/$TARGET_CODENAME/framework-audit.json" || exit 1
         LOG_STEP_OUT
     fi
