@@ -183,14 +183,14 @@ GENERATE_UPDATER_SCRIPT()
                 echo -n "$b.img"
                 echo -n '", '
                 GET_DEVICE_FROM_MOUNTPOINT "/$b"
-                echo    ");"
+                echo    ') || abort("E4002: Failed to write kernel image.");'
             fi
         done
         if [ -f "$TMP_DIR/boot.img" ]; then
             echo    'ui_print("Installing boot image...");'
             echo -n 'package_extract_file("boot.img", '
             GET_DEVICE_FROM_MOUNTPOINT "/boot"
-            echo    ");"
+            echo    ') || abort("E4003: Failed to write boot image.");'
         fi
 
         echo    'show_progress(0.100000, 10);'
@@ -215,7 +215,7 @@ fi
 TARGET_ZIP="$1"
 OUTPUT_FILE="$2"
 
-if ! unzip -l "$TARGET_ZIP" | grep -q "build_info.txt" || unzip -l "$TARGET_ZIP" | grep -q "META-INF"; then
+if ! unzip -p "$TARGET_ZIP" build_info.txt >/dev/null 2>&1; then
     LOGE "File not valid: ${TARGET_ZIP//$SRC_DIR\//}"
     exit 1
 fi
@@ -237,6 +237,16 @@ if [ ! -d "$SRC_DIR/target/$TARGET_CODENAME" ]; then
 fi
 
 TARGET_USE_DYNAMIC_PARTITIONS="$(grep "^use_dynamic_partitions" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+
+# Legacy S10 devices must not use the dynamic-partition updater from newer models.
+case "$TARGET_CODENAME" in
+    beyond0lte|beyond1lte|beyond2lte|beyondx)
+        if [[ "$TARGET_USE_DYNAMIC_PARTITIONS" != "false" ]]; then
+            LOGE "S10 legacy ZIP requested dynamic partitions; refusing to package"
+            exit 1
+        fi
+        ;;
+esac
 
 if $TARGET_USE_DYNAMIC_PARTITIONS; then
     LOG "- Generating dynamic_partitions_op_list"
@@ -298,5 +308,18 @@ if ! $DEBUG || $ROM_IS_OFFICIAL; then
 else
     mv -f "$TMP_DIR/rom.zip" "$OUTPUT_FILE"
 fi
+
+
+# Validate ZIP references and integrity before reporting packaging success.
+case "$TARGET_CODENAME" in
+    beyond0lte|beyond1lte|beyond2lte|beyondx)
+        if ! python3 "$SRC_DIR/scripts/internal/validate_flashable_zip.py" \
+            "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" --deep; then
+            LOGE "Produced ZIP failed S10 installer validation; refusing to publish"
+            rm -f "$OUTPUT_FILE"
+            exit 1
+        fi
+        ;;
+esac
 
 exit 0
