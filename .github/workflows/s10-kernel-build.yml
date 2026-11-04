@@ -4,13 +4,6 @@ on:
     branches: ['port/s10-exynos9820']
     paths: ['.github/workflows/s10-kernel-build.yml']
   workflow_dispatch:
-    inputs:
-      target:
-        description: 'Exynos S10 model'
-        type: choice
-        required: true
-        default: all
-        options: [all, beyond0lte, beyond1lte, beyond2lte, beyondx]
 
 permissions:
   contents: read
@@ -18,7 +11,6 @@ permissions:
 jobs:
   kernel:
     name: Compile experimental kernel (${{ matrix.target }})
-    if: ${{ github.event_name == 'push' || inputs.target == 'all' || inputs.target == matrix.target }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     concurrency:
