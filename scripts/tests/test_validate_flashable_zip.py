@@ -67,6 +67,22 @@ class InstallerZipTests(unittest.TestCase):
             "dynamic_partitions_op_list": b"remove_all_groups\n"
         }))
 
+    def test_block_update_cannot_redirect_system_payload_to_efs(self):
+        dangerous = INSTALLER.replace(
+            'block_image_update("/dev/block/by-name/system"',
+            'block_image_update("/dev/block/by-name/efs"')
+        self.assertIn("E544", self.check(extras={
+            "META-INF/com/google/android/updater-script": dangerous.encode()
+        }))
+
+    def test_block_update_cannot_use_dynamic_path_expression(self):
+        dangerous = INSTALLER.replace(
+            'block_image_update("/dev/block/by-name/system"',
+            'block_image_update(getprop("ro.product.device")')
+        self.assertIn("E543", self.check(extras={
+            "META-INF/com/google/android/updater-script": dangerous.encode()
+        }))
+
     def test_protected_efs_write_rejected(self):
         self.assertIn("E523", self.check(extras={
             "META-INF/com/google/android/updater-script": (
