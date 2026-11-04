@@ -174,6 +174,13 @@ if $BUILD_TARGET_FILES || $BUILD_FLASHABLE_ZIP; then
     fi
     ZIP_FILE_NAME+="-target_files.zip"
 
+    # A forced rebuild must not silently reuse a target-files archive from
+    # an older firmware extraction or from a previous run.
+    if $FORCE && [ -f "$OUT_DIR/$ZIP_FILE_NAME" ]; then
+        LOGW "Removing stale target-files archive for forced build: $ZIP_FILE_NAME"
+        rm -f "$OUT_DIR/$ZIP_FILE_NAME" || exit 1
+    fi
+
     if [ ! -f "$OUT_DIR/$ZIP_FILE_NAME" ]; then
         LOG_STEP_IN true "Creating target-files zip"
         "$SRC_DIR/scripts/internal/create_target_files_zip.sh" "$OUT_DIR/$ZIP_FILE_NAME" || exit 1
