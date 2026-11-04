@@ -105,7 +105,7 @@ class S10FrameworkTests(unittest.TestCase):
                          "libsamsungSoundbooster_plus_legacy.so"):
                 target = work / "system/system/lib64" / name
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"\\x7fELF\\x02" + b"synthetic")
+                target.write_bytes(b"\x7fELF\x02" + b"synthetic")
             for name in ("GameDriver-EX9820", "DevGPUDriver-EX9820"):
                 target = work / "system/system/priv-app" / name / f"{name}.apk"
                 target.parent.mkdir(parents=True, exist_ok=True)
