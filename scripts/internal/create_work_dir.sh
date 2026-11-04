@@ -28,7 +28,9 @@ COPY_SOURCE_FIRMWARE()
                     # Cross-check the actual stock vendor device before setting S10 identity.
                     local STOCK_DEVICE STOCK_MODEL
                     STOCK_DEVICE="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")"
-                    if [[ "$STOCK_DEVICE" != "$TARGET_CODENAME" ]]; then
+                    # Samsung stock vendor builds may use beyond0/1/2 aliases.
+                    local STOCK_ALIAS="${TARGET_CODENAME%lte}"
+                    if [[ "$STOCK_DEVICE" != "$TARGET_CODENAME" && "$STOCK_DEVICE" != "$STOCK_ALIAS" ]]; then
                         LOGE "E660: target stock vendor identifies as '$STOCK_DEVICE', expected '$TARGET_CODENAME'"
                         return 1
                     fi
