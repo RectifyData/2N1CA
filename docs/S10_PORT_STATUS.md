@@ -1,0 +1,93 @@
+# 2N1CA / Exynos 9820 — migration status
+
+> **DEVELOPMENT ONLY — NOT SAFE TO FLASH.** No S10 boot, recovery installation,
+> modem, NFC, camera, Wi-Fi, graphics, telephony, encryption, or SELinux test on
+> physical hardware has been completed. This source branch does not yet supply a
+> validated flashable ROM.
+
+## Scope
+
+This branch intentionally contains only these Exynos Galaxy S10 targets:
+
+| Codename | Model | Exynos |
+|---|---|---|
+| `beyond0lte` | S10e SM-G970F / SM-G970N | 9820 |
+| `beyond1lte` | S10 SM-G973F / SM-G973N | 9820 |
+| `beyond2lte` | S10+ SM-G975F / SM-G975N | 9820 |
+| `beyondx` | S10 5G SM-G977B / SM-G977N | 9820 |
+
+Archive-derived device floating features and overlays were imported from
+[ArtisanROM_old `sixteen-old`](https://github.com/ArtisanROM-archive/ArtisanROM_old/tree/sixteen-old)
+(see license in upstream). This branch uses the new 2N1CA `TARGET_...` key schema.
+
+## Operating-system donor
+
+The S10-specific Exynos SSI configuration now selects the Samsung Galaxy S25
+FE (SM-S731B) as an **experimental Android 16 / One UI 8.5 donor** instead of
+the previous S22 One UI 8.0 firmware. Samsung announced One UI 8.5 on S25 FE in
+May 2026. Verified stock build examples include `S731BXXU6BZDP`, but the
+firmware auto-downloader may select a **newer Android 17 / One UI 9 build**.
+
+The donor version gate reads the actual extracted `build.prop` and rejects
+all firmware that does not identify as Android SDK 36 and One UI 8.5.
+An authenticated/cached historical One UI 8.5 source archive may be required
+if Samsung's firmware service now returns One UI 9.
+
+**Changing the donor does not automatically port every One UI framework patch.**
+Existing UN1CA 3.2.1 patches must be reviewed and reworked against the actual
+8.5 APK/JAR/binary versions. Stock S10 Android 12 vendor HALs also need
+compatibility work for Android 16; do not assume a successful image build boots.
+
+## Recovery ZIP and partition safety
+
+- Legacy `ext4` partitions; no dynamic super partition or retrofit super.
+- `platform/exynos9820/installer/recovery.fstab` names only allowed
+  legacy OS partitions and boot.
+- The stock Samsung CSC PIT is parsed for system/vendor/product/odm/boot
+  capacities. No capacity is invented or copied from a different device.
+- Each cached PIT-derived layout is associated with a SHA256 of the stock
+  target firmware identifier; credentials are not printed in normal build logs.
+- Before image creation, all five capacities must be present and numeric.
+- The installer excludes unsupported modern boot images, includes required
+  block-patch files, checks ZIP CRCs, and rejects unrecognized S10 partition
+  writes in the static pre-release validator.
+- A source-only kernel marker blocks flashable packaging until there is a
+  separately validated Android 16-capable Exynos9820 boot image.
+- No EFS, modem calibration, metadata, bootloader or unique device partitions
+  are wiped, resized, or intentionally included in S10 ZIPs.
+
+Note that **a valid CSC PIT is not necessarily the PIT installed on a phone
+that has previously been repartitioned**. A physical per-device partition audit
+remains mandatory before any installation.
+
+## Build workflow
+
+The four top-level commands are `prepare.sh`, `download.sh`, `build.sh`,
+and `verify.sh`. The GitHub Actions **2N1CA S10 sync and build** workflow
+supports a light `config` check or an explicit `build` request, selecting
+one of the four target codenames.
+
+Optional private secrets used by the manual build workflow:
+`S10_SOURCE_FIRMWARE` and `S10_TARGET_FIRMWARE`. These are intended for
+permitted Samsung firmware download credentials and are **not stored in Git**.
+
+The experimental kernel CI compiles pinned
+[Android-Artisan Exynos 9820 kernel](https://github.com/Android-Artisan/android_kernel_samsung_exynos9820)
+revision `9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb`. Its output is a
+developer artifact, **not a validated Galaxy S10 ROM**.
+
+## Remaining blockers
+
+1. Obtain per-variant stock PIT/firmware data and compare with the *actual*
+   on-device partition map; never repartition an only device as a shortcut.
+2. Complete One UI 8.5 framework/APEX/system_ext adaptation for S10's Android
+   12 vendor, VNDK/HIDL/AIDL bridges, init services, SELinux, VINTF and kernel.
+3. Validate selected Exynos 9820 boot image and device tree; a header check,
+   checksum or successful compilation is **not** a successful boot test.
+4. Confirm at minimum calls/data/SMS, graphics, camera, audio, Wi-Fi, BT,
+   NFC, thermal protections, fingerprint, encryption and recovery behavior.
+5. Only after independent hardware evidence, consider a clearly labeled
+   test ROM release. The installer must stop on irrecoverable failures even
+   if recovery displays its generic "Error 1" status.
+
+The `sixteen` branch is unchanged by this experimental migration.
