@@ -87,6 +87,19 @@ developer artifact, **not a validated Galaxy S10 ROM**.
 
 **This source is still not a boot-verified or flash-safe ROM.** The framework audit checks file structure and consistency, not runtime behavior. Thermal policy, Exynos9820 vendor HALs, APEX compatibility, SELinux, NFC, camera, audio, graphics, fingerprint, modem and recovery installation all remain hardware-dependent blockers.
 
+### Framework verification and donor isolation (current branch)
+
+- Runtime system identity is sourced from matching S10 stock vendor properties, with model checks before overwriting the One UI donor properties.
+- The S10 build selects a Galaxy S25 FE donor profile; actual Android 16/One UI 8.5 properties are validated after extraction, and an unconfigured donor is rejected.
+- Per-device framework and SystemUI resource overlays and floating-feature profiles have been imported; source availability and XML syntax are checked.
+- VNDK 31 for S10 stock vendor is separate from S10 original launch board API 28 and from donor board API 34. The compatibility script rejects unrelated Qualcomm APEX substitutions.
+- The Exynos9820 NFC path preserves SLSI stock variants rather than injecting a newer, unrelated NFC JNI library.
+- The final Samsung camera capability XML is checked by hash against the matching S10 stock firmware, not merely by XML syntax.
+- Samsung Device Health Manager's rebuilt APK is checked for the exact S10 SSRM/thermal policy name. Missing policy is a hard E734 error; donor thermal policy is not substituted.
+- Framework JARs/APKs, VINTF manifest XML, SELinux policy version, Android SDK, One UI version and S10 device identity are checked before target-files packaging.
+
+These checks do **not** make ART, APEX, HIDL/AIDL, RIL, camera, audio, graphics, fingerprint, Bluetooth or NFC work at runtime. They detect mismatches in available source and images. Firmware extraction, dependency resolution, and physical-device testing are still outstanding.
+
 ## Remaining blockers
 
 1. Obtain per-variant stock PIT/firmware data and compare with the *actual*
