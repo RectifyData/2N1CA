@@ -8,6 +8,7 @@ This is NOT a replacement for VTS/checkvintf, hardware tests, or boot testing.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -107,10 +108,19 @@ def static_audit(source: Path, device: str) -> list[str]:
     return errors
 
 
-def workdir_audit(work: Path, device: str) -> list[str]:
+def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> list[str]:
     errors: list[str] = []
     sysprop = properties(work / "system/system/build.prop")
     vendor = properties(work / "vendor/build.prop")
+    if stock_target is not None:
+        stock_camera = stock_target / "system/system/cameradata/camera-feature.xml"
+        compiled_camera = work / "system/system/cameradata/camera-feature.xml"
+        if not stock_camera.is_file() or not compiled_camera.is_file():
+            errors.append("E735: matching stock S10 camera feature XML is missing")
+        elif hashlib.sha256(stock_camera.read_bytes()).digest() != hashlib.sha256(
+            compiled_camera.read_bytes()
+        ).digest():
+            errors.append("E736: final camera capability data differs from stock S10")
     if sysprop.get("ro.product.device") != device:
         errors.append(f"E720: system framework device mismatch: {sysprop.get('ro.product.device')!r}")
     if sysprop.get("ro.product.system.device", device) != device:
@@ -184,11 +194,12 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--device", choices=TARGETS, required=True)
     parser.add_argument("--work-dir", type=Path, help="post-patch ROM work_dir")
+    parser.add_argument("--stock-target", type=Path, help="matching extracted S10 stock firmware")
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
     errors = static_audit(args.source, args.device)
     if args.work_dir:
-        errors.extend(workdir_audit(args.work_dir, args.device))
+        errors.extend(workdir_audit(args.work_dir, args.device, args.stock_target))
     report = {
         "device": args.device, "errors": errors,
         "static_target_and_framework_contract_checked": True,
