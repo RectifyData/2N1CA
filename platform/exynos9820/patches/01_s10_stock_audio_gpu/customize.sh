@@ -25,6 +25,16 @@ for S10_LIB in "${S10_AUDIO_LIBS[@]}"; do
         0 0 644 "u:object_r:system_lib_file:s0" || return 1
 done
 
+# Remove driver packages for foreign Exynos SoCs before adding EX9820.
+# Do not run recursive deletion outside the platform driver-app directory.
+for S10_DRIVER_DIR in "$WORK_DIR/system/system/priv-app"/*GameDriver-EX*; do
+    [[ -d "$S10_DRIVER_DIR" ]] || continue
+    S10_DRIVER_NAME="${S10_DRIVER_DIR##*/}"
+    [[ "$S10_DRIVER_NAME" == *-EX9820 ]] && continue
+    DELETE_FROM_WORK_DIR "system" "system/priv-app/$S10_DRIVER_NAME" || return 1
+done
+unset S10_DRIVER_DIR S10_DRIVER_NAME
+
 # GPU apps must match Exynos9820 rather than the new donor GPU driver.
 S10_GPU_APPS=(GameDriver-EX9820 DevGPUDriver-EX9820)
 for S10_APP in "${S10_GPU_APPS[@]}"; do
