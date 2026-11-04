@@ -48,14 +48,6 @@ class PitLayoutTests(unittest.TestCase):
         with self.assertRaises(mod.LayoutError):
             mod.parse_pit(make_pit()[:-1])
 
-    def test_reject_duplicate_entries(self):
-        with self.assertRaises(mod.LayoutError):
-            mod.parse_pit(make_pit({"BOOT": 131072, "SYSTEM": 4194304}) +
-                          bytes()) if False else mod.parse_pit(make_pit({
-                              "BOOT": 131072, "SYSTEM": 4194304, "VENDOR": 2097152
-                          })[:-100])
-        # Separate duplicate test below uses a valid modified second record.
-
     def test_reject_duplicate_name(self):
         data = bytearray(make_pit())
         data[28 + 132 + 36:28 + 132 + 36 + 6] = b"BOOT\0\0"
