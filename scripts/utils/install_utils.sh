@@ -77,6 +77,49 @@ PRINT_ASSERTIONS()
     local DEVICE
     DEVICE="$(grep "^device" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
 
+    # In third-party S10 recoveries ro.boot.em.model may be absent.
+    # Require a correct legacy codename; if a bootloader model IS supplied
+    # it must also match, so the missing-property fallback cannot mask a
+    # known wrong hardware model.
+    case "$DEVICE" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            local MODELS MODEL
+            IFS=';' read -r -a MODELS <<< "$(grep "^model=" <<< "$BUILD_INFO" | cut -d "=" -f 2-)"
+            if [ "${#MODELS[@]}" -eq 0 ] || [ -z "${MODELS[0]}" ]; then
+                LOGE "E3005: Missing S10 model allowlist for $DEVICE"
+                return 1
+            fi
+            echo -n '(getprop("ro.boot.em.model") == ""'
+            for MODEL in "${MODELS[@]}"; do
+                if [[ ! "$MODEL" =~ ^SM-G[0-9]{3}[A-Z]$ ]]; then
+                    LOGE "E3006: Invalid model assertion in build metadata"
+                    return 1
+                fi
+                echo -n ' || getprop("ro.boot.em.model") == "'
+                echo -n "$MODEL"
+                echo -n '"'
+            done
+            echo -n ') && (getprop("ro.product.device") == "'
+            echo -n "$DEVICE"
+            echo -n '" || getprop("ro.build.product") == "'
+            echo -n "$DEVICE"
+            echo -n '"'
+            if [[ "$DEVICE" == *lte ]]; then
+                echo -n ' || getprop("ro.product.device") == "'
+                echo -n "${DEVICE%lte}"
+                echo -n '"'
+            fi
+            for MODEL in "${MODELS[@]}"; do
+                echo -n ' || getprop("ro.boot.em.model") == "'
+                echo -n "$MODEL"
+                echo -n '"'
+            done
+            echo -n ') || abort("E3004: Wrong Galaxy S10 model or codename; installation stopped.");'
+            echo
+            return 0
+            ;;
+    esac
+
     if [ "$(grep "^model" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)" ]; then
         local TARGET_ASSERT_MODEL
         TARGET_ASSERT_MODEL="$(grep "^model" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
