@@ -261,6 +261,9 @@ for p in $PARTITIONS_LIST; do
     LOG "- Converting $p.img to $p.new.dat"
     EVAL "img2sdat -o \"$TMP_DIR\" --tgt-block-map \"$TMP_DIR/$p.map\" \"$TMP_DIR/$p.img\"" || exit 1
     rm -f "$TMP_DIR/$p.img" "$TMP_DIR/$p.map"
+    # Full block OTAs can have an empty patch file; edify still references it.
+    # Include the empty payload explicitly instead of an Error 1 at install time.
+    [ -f "$TMP_DIR/$p.patch.dat" ] || : > "$TMP_DIR/$p.patch.dat"
 
     if ! $DEBUG; then
         LOG "- Compressing $p.new.dat"
