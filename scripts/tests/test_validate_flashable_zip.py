@@ -86,13 +86,13 @@ class InstallerZipTests(unittest.TestCase):
     def make_layout(self, system=8192, boot=8192):
         layout = Path(self.tmp.name) / "pit-layout.env"
         layout.write_text(
-            "S10_SOURCE_PIT_SHA256=\"" + "a" * 64 + "\"\\n"
-            "S10_TARGET_FIRMWARE_SHA256=\"" + "b" * 64 + "\"\\n"
-            + f"TARGET_SYSTEM_PARTITION_SIZE={system}\\n"
-            + "TARGET_VENDOR_PARTITION_SIZE=8192\\n"
-            + "TARGET_PRODUCT_PARTITION_SIZE=8192\\n"
-            + "TARGET_ODM_PARTITION_SIZE=8192\\n"
-            + f"TARGET_BOOT_PARTITION_SIZE={boot}\\n"
+            "S10_SOURCE_PIT_SHA256=\"" + "a" * 64 + "\"\n"
+            "S10_TARGET_FIRMWARE_SHA256=\"" + "b" * 64 + "\"\n"
+            + f"TARGET_SYSTEM_PARTITION_SIZE={system}\n"
+            + "TARGET_VENDOR_PARTITION_SIZE=8192\n"
+            + "TARGET_PRODUCT_PARTITION_SIZE=8192\n"
+            + "TARGET_ODM_PARTITION_SIZE=8192\n"
+            + f"TARGET_BOOT_PARTITION_SIZE={boot}\n"
         )
         return layout
 
@@ -100,7 +100,7 @@ class InstallerZipTests(unittest.TestCase):
         self.assertEqual("", self.check(
             layout=self.make_layout(),
             extras={
-                "system.transfer.list": b"4\\n1\\n0\\n0\\nnew 2,0,1\\n",
+                "system.transfer.list": b"4\n1\n0\n0\nnew 2,0,1\n",
                 "system.new.dat": b"x" * 4096,
             }
         ))
@@ -109,7 +109,7 @@ class InstallerZipTests(unittest.TestCase):
         problems = self.check(
             layout=self.make_layout(system=4096),
             extras={
-                "system.transfer.list": b"4\\n2\\n0\\n0\\nnew 2,0,2\\n",
+                "system.transfer.list": b"4\n2\n0\n0\nnew 2,0,2\n",
                 "system.new.dat": b"x" * 8192,
             }
         )
@@ -119,7 +119,7 @@ class InstallerZipTests(unittest.TestCase):
         problems = self.check(
             layout=self.make_layout(),
             extras={
-                "system.transfer.list": b"4\\n1\\n0\\n0\\nnew 2,0,1\\n",
+                "system.transfer.list": b"4\n1\n0\n0\nnew 2,0,1\n",
                 "system.new.dat": b"short",
             }
         )
@@ -129,7 +129,7 @@ class InstallerZipTests(unittest.TestCase):
         problems = self.check(
             layout=self.make_layout(),
             extras={
-                "system.transfer.list": b"4\\n1\\n0\\n0\\nmove 2,0,1\\n",
+                "system.transfer.list": b"4\n1\n0\n0\nmove 2,0,1\n",
             }
         )
         self.assertIn("E540", problems)
@@ -141,7 +141,7 @@ class InstallerZipTests(unittest.TestCase):
 
     def test_corrupt_pit_manifest_rejected(self):
         layout = self.make_layout()
-        layout.write_text("TARGET_SYSTEM_PARTITION_SIZE=0\\n")
+        layout.write_text("TARGET_SYSTEM_PARTITION_SIZE=0\n")
         self.assertIn("E541", self.check(layout=layout))
 
 
