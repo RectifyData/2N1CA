@@ -13,7 +13,7 @@ on:
         type: choice
         required: true
         default: config
-        options: [config, build]
+        options: [config, target-files, build]
 
 concurrency:
   group: s10-build-${{ github.ref }}-${{ inputs.device }}
@@ -46,7 +46,7 @@ jobs:
   compile:
     name: Experimental full ROM packaging
     needs: config
-    if: ${{ inputs.mode == 'build' }}
+    if: ${{ inputs.mode != 'config' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
@@ -74,15 +74,27 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
-          bash build.sh "$DEVICE"
+          if [[ "${{ inputs.mode }}" == "target-files" ]]; then
+            bash build.sh "$DEVICE" --target-files-only
+          else
+            bash build.sh "$DEVICE"
+          fi
       - name: Collect validated experimental artifacts
-        if: success()
+        if: ${{ success() && inputs.mode == 'build' }}
         uses: actions/upload-artifact@v4
         with:
           name: EXPERIMENTAL-UNVERIFIED-2N1CA-${{ env.DEVICE }}
           path: |
             out/2N1CA_*.zip
             out/2N1CA_*.zip.sha256
+          if-no-files-found: error
+          retention-days: 2
+      - name: Collect non-flashable target-files for source diagnostics
+        if: ${{ success() && inputs.mode == 'target-files' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DO-NOT-FLASH-S10-target-files-${{ env.DEVICE }}
+          path: out/${{ env.DEVICE }}_*-target_files.zip
           if-no-files-found: error
           retention-days: 2
       - name: Notice
