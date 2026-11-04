@@ -49,4 +49,9 @@ donor_region="${donor_rest%%/*}"
 donor_prop="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
 python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_prop" ||
   s10_die "Donor is not Android 16 / One UI 8.5. Provide a pinned compatible firmware archive."
+s10_info "Auditing S10 vendor HAL/init/VINTF/partition layout"
+python3 "$ROOT/scripts/internal/s10_vendor_audit.py" \
+  "$FW_DIR/${model}_${region}" \
+  --output "$OUT_DIR/target/$DEVICE/vendor_audit.json" ||
+  s10_die "Target S10 vendor firmware has missing mandatory components"
 s10_info "Firmware prepared for $DEVICE"
