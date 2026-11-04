@@ -107,11 +107,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help=".pit file or Samsung CSC tar.md5")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--firmware-id", help="Private target firmware ID; only its SHA256 is stored")
     args = parser.parse_args()
     try:
         data, name = read_pit_from_source(args.source)
         layout = validate_s10_layout(parse_pit(data))
         content = make_env(layout, data, name)
+        if args.firmware_id:
+            content += f'S10_TARGET_FIRMWARE_SHA256="{hashlib.sha256(args.firmware_id.encode()).hexdigest()}"\n'
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(content)
     except (LayoutError, UnicodeError, OSError, tarfile.TarError, ValueError) as exc:
