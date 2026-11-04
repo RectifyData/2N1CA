@@ -15,9 +15,13 @@ command -v python3 >/dev/null || s10_die "Python 3 required"
 s10_info "Running installer unit tests"
 python3 -m unittest discover -s "$ROOT/scripts/tests" -p 'test_*.py' -v ||
   s10_die "Installer regression tests failed"
-s10_info "Validating ZIP metadata, image references, partition restrictions and CRC"
+# The stock PIT is the only supported source for partition capacities.
+# A ZIP without this manifest must not be labelled an S10 release candidate.
+LAYOUT="$ROOT/out/target/$DEVICE/pit-layout.env"
+[[ -s "$LAYOUT" ]] || s10_die "E610: No verified S10 stock PIT manifest; refusing ZIP verification"
+s10_info "Checking ZIP payload ranges, stock PIT capacities, metadata and CRC"
 python3 "$ROOT/scripts/internal/validate_flashable_zip.py" "$FILE" \
-  --expected-device "$DEVICE" --deep ||
+  --expected-device "$DEVICE" --layout "$LAYOUT" --deep ||
   s10_die "ZIP rejected; do not install or release"
 s10_info "Writing SHA256 checksum"
 sha256sum "$FILE" > "$FILE.sha256" || s10_die "Cannot write checksum"
