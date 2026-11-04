@@ -98,6 +98,16 @@ class S10FrameworkTests(unittest.TestCase):
             self.assertTrue(any("E739" in problem for problem in errors), errors)
             self.assertTrue(any("E740" in problem for problem in errors), errors)
 
+    def test_reject_donor_audio_gpu_components(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            (work / "system/system/lib64").mkdir(parents=True, exist_ok=True)
+            (work / "system/system/lib64/lib_SoundBooster_ver2080.so").write_bytes(b"bad")
+            (work / "system/system/priv-app/DevGameDriver-EX2400").mkdir(parents=True)
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertTrue(any("E741" in problem for problem in errors), errors)
+            self.assertTrue(any("E742" in problem for problem in errors), errors)
+
     def test_stock_elf64_audio_and_gpu_apks_pass_asset_checks(self):
         with tempfile.TemporaryDirectory() as root:
             work = Path(root)
