@@ -33,6 +33,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The Ubuntu Actions kernel is managed by GitHub. Do not install
+          # missing linux-modules-extra-$(uname -r) packages.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           sudo apt-get update -qq
           DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
             bc bison build-essential ccache cpio curl flex libarchive-tools \
@@ -57,6 +60,10 @@ jobs:
           test -s "build/out/$DEVICE/boot.img"
           test -s "build/out/$DEVICE/dtb.img"
           test -s "build/out/$DEVICE/dtbo.img"
+          # Do not silently accept symlinks/empty auxiliary images.
+          test ! -L "build/out/$DEVICE/boot.img"
+          test ! -L "build/out/$DEVICE/dtb.img"
+          test ! -L "build/out/$DEVICE/dtbo.img"
           python3 - "$DEVICE" <<'PY'
           import sys
           from pathlib import Path
