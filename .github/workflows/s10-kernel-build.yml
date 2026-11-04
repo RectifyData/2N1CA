@@ -9,23 +9,27 @@ on:
         description: 'Exynos S10 model'
         type: choice
         required: true
-        default: beyond2lte
-        options: [beyond0lte, beyond1lte, beyond2lte, beyondx]
-
-concurrency:
-  group: exynos9820-kernel-${{ github.ref }}
-  cancel-in-progress: true
+        default: all
+        options: [all, beyond0lte, beyond1lte, beyond2lte, beyondx]
 
 permissions:
   contents: read
 
 jobs:
   kernel:
-    name: Compile experimental kernel
+    name: Compile experimental kernel (${{ matrix.target }})
+    if: ${{ github.event_name == 'push' || inputs.target == 'all' || inputs.target == matrix.target }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    concurrency:
+      group: exynos9820-kernel-${{ github.ref }}-${{ matrix.target }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [beyond0lte, beyond1lte, beyond2lte, beyondx]
     env:
-      DEVICE: ${{ inputs.target || 'beyond2lte' }}
+      DEVICE: ${{ matrix.target }}
       PINNED_KERNEL_SHA: 9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb
     steps:
       - uses: actions/checkout@v4
