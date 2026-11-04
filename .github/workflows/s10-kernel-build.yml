@@ -1,0 +1,86 @@
+name: Experimental Exynos9820 kernel build
+on:
+  push:
+    branches: ['port/s10-exynos9820']
+    paths: ['.github/workflows/s10-kernel-build.yml']
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Exynos S10 model'
+        type: choice
+        required: true
+        default: beyond2lte
+        options: [beyond0lte, beyond1lte, beyond2lte, beyondx]
+
+concurrency:
+  group: exynos9820-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    name: Compile experimental kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DEVICE: ${{ inputs.target || 'beyond2lte' }}
+      PINNED_KERNEL_SHA: 9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            bc bison build-essential ccache cpio curl flex libarchive-tools \
+            libelf-dev libssl-dev python3 rsync unzip xz-utils zip
+          df -h
+      - name: Clone pinned Exynos9820 kernel sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init kernel
+          git -C kernel remote add origin https://github.com/Android-Artisan/android_kernel_samsung_exynos9820.git
+          git -C kernel fetch --depth=1 --filter=blob:none origin "$PINNED_KERNEL_SHA"
+          git -C kernel checkout --detach FETCH_HEAD
+          test "$(git -C kernel rev-parse HEAD)" = "$PINNED_KERNEL_SHA"
+          git -C kernel submodule update --init --recursive --depth=1
+      - name: Compile selected S10 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd kernel
+          bash ./build.sh -m "$DEVICE" -k n -r n
+          test -s "build/out/$DEVICE/boot.img"
+          test -s "build/out/$DEVICE/dtb.img"
+          test -s "build/out/$DEVICE/dtbo.img"
+          python3 - "$DEVICE" <<'PY'
+          import sys
+          from pathlib import Path
+          target = sys.argv[1]
+          image = Path('build/out') / target / 'boot.img'
+          with image.open('rb') as stream:
+              assert stream.read(8) == b'ANDROID!', 'Boot image does not have Android header'
+          print('Experimental kernel compiled and boot image header validated.')
+          PY
+          sha256sum "build/out/$DEVICE/"*.img > "kernel-sha256-$DEVICE.txt"
+      - name: Upload developer-only kernel output (NOT FLASH-SAFE)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DO-NOT-FLASH-exynos9820-${{ env.DEVICE }}
+          path: |
+            kernel/build/out/${{ env.DEVICE }}/boot.img
+            kernel/build/out/${{ env.DEVICE }}/dtb.img
+            kernel/build/out/${{ env.DEVICE }}/dtbo.img
+            kernel/kernel-sha256-${{ env.DEVICE }}.txt
+          retention-days: 2
+          if-no-files-found: error
+      - name: Safety notice
+        if: always()
+        run: |
+          echo 'Kernel compilation DOES NOT prove bootability, display, radio, camera or other hardware functionality.'
+          echo 'These are experimental development artifacts. NEVER flash on an only device.'
