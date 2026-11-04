@@ -60,5 +60,19 @@ class S10FrameworkTests(unittest.TestCase):
             self.assertFalse(any("E724" in x for x in errors))
 
 
+    def test_missing_target_thermal_policy_is_a_blocker(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            health = work / (
+                "system/system/priv-app/SamsungDeviceHealthManagerService/"
+                "SamsungDeviceHealthManagerService.apk"
+            )
+            health.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(health, "w") as archive:
+                archive.writestr("assets/ssrm_s22.xml", "<resources/>")
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertTrue(any("E734" in x for x in errors), errors)
+
+
 if __name__ == "__main__":
     unittest.main()
