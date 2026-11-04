@@ -134,6 +134,24 @@ def workdir_audit(work: Path, device: str) -> list[str]:
     if not any((work / p).is_file() and zipfile.is_zipfile(work / p)
                for p in SYSTEM_UI_PATHS):
         errors.append("E725: system UI APK is missing or corrupt")
+    # Thermal policy names must have matching assets in the actual final
+    # SamsungDeviceHealthManagerService APK. Never substitute S22 thermal data.
+    target_config = (Path(__file__).resolve().parents[2] / "target" / device / "config.sh")
+    if target_config.is_file():
+        thermal_name = assignment(
+            target_config.read_text(errors="replace"),
+            "TARGET_DVFSAPP_CONFIG_SSRM_POLICY_FILENAME"
+        )
+        health_apk = work / (
+            "system/system/priv-app/SamsungDeviceHealthManagerService/"
+            "SamsungDeviceHealthManagerService.apk"
+        )
+        if thermal_name and health_apk.is_file() and zipfile.is_zipfile(health_apk):
+            with zipfile.ZipFile(health_apk) as z:
+                filenames = [Path(item).name for item in z.namelist()]
+            if not any(thermal_name in filename for filename in filenames):
+                errors.append(f"E734: S10 thermal policy {thermal_name} is missing "
+                              "from Samsung Device Health Manager; not safe to build")
     for relative in VINTF:
         p = work / relative
         try:
