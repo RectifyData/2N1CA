@@ -24,8 +24,10 @@ jobs:
         env:
           DEVICE: ${{ matrix.target }}
         run: |
-          set -euo pipefail
+          set -eo pipefail
+          # UN1CA buildenv.sh evaluates unset optional variables; do not use nounset while sourcing.
           source ./buildenv.sh "$DEVICE"
+          set -u
           test "$TARGET_CODENAME" = "$DEVICE"
           test "$TARGET_PLATFORM" = "exynos9820"
           test "$TARGET_USE_DYNAMIC_PARTITIONS" = "false"
