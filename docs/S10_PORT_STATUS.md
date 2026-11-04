@@ -115,3 +115,46 @@ These checks do **not** make ART, APEX, HIDL/AIDL, RIL, camera, audio, graphics,
    if recovery displays its generic "Error 1" status.
 
 The `sixteen` branch is unchanged by this experimental migration.
+
+## November 4 engineering regression audit
+
+The S10-only branch now separates **source validation** from manual firmware
+compilation. The old CI attempted four firmware builds automatically and
+failed installing an unavailable `linux-modules-extra` package on GitHub's
+hosted runner. The replacement CI runs Bash/Python tests and source
+configuration checks for each S10 target without misrepresenting those checks
+as a booted ROM. `s10-build.yml` remains the manual firmware-build entry
+point; kernel development uses a separate experimental workflow.
+
+The flashable ZIP verifier now parses full-OTA sdat transfer ranges, compares
+them with stock CSC PIT capacities, detects missing/corrupt metadata, rejects
+oversized raw boot images, and forbids auxiliary DT/DTBO/vendor_boot/init_boot
+writes without verified S10 partition mappings. It requires a PIT manifest
+at packaging time; the source PIT alone cannot prove the actual partition
+map of a phone that was repartitioned previously.
+
+Four archived demonstration firmware identifiers have been removed from the
+device targets. Private `S10_TARGET_FIRMWARE` (or its target-specific
+`S10_TARGET_FIRMWARE_BEYOND*` equivalents) is required for downloading
+firmware; source and target models are checked to avoid mixing a Galaxy S10
+5G and S10+. The source donor ID is separately configured through
+`S10_ONEUI_85_SOURCE_FIRMWARE` and remains a hard prerequisite for a
+real firmware compile. Neither value should be checked into Git.
+
+Framework model properties are now required to match the actual target
+model allowlist. Third-party recoveries that omit `ro.boot.em.model` can
+use the S10 codename fallback in the Edify assertion; a present but
+mismatched bootloader model is never ignored.
+
+### Unresolved, do-not-flash conditions
+
+- No validated One UI 8.5 donor firmware extraction, VINTF runtime compatibility
+  test, or complete framework/APEX/native library port is available.
+- Proprietary Exynos 9820 graphics, RIL, NFC, Wi-Fi, Bluetooth, camera, fingerprint,
+  thermal and audio integration is not proven on Android 16.
+- Bootloader, ramdisk, kernel, recovery and real on-device partition mappings
+  have not been validated for a safe flashable image. The kernel compiler
+  workflow, even if successful, is not evidence of a completed boot.
+- None of the four variants has a demonstrated first boot or a hardware
+  regression pass. Do not download this prerelease for flashing on a daily
+  driver or only phone.
