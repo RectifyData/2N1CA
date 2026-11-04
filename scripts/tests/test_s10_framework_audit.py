@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Offline tests for 2N1CA S10 framework adaptation contracts."""
+import importlib.util
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+MODULE = Path(__file__).resolve().parents[1] / "internal/s10_framework_audit.py"
+SPEC = importlib.util.spec_from_file_location("s10_framework_audit", MODULE)
+AUDIT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(AUDIT)
+SOURCE = Path(__file__).resolve().parents[2]
+
+
+class S10FrameworkTests(unittest.TestCase):
+    def test_every_s10_target_overlay_and_feature_contract(self):
+        for device in AUDIT.TARGETS:
+            with self.subTest(device=device):
+                self.assertEqual(AUDIT.static_audit(SOURCE, device), [])
+
+    def test_real_target_files_are_required(self):
+        with tempfile.TemporaryDirectory() as root:
+            errors = AUDIT.static_audit(Path(root), "beyond2lte")
+            self.assertTrue(any("E700" in x for x in errors))
+
+    def test_missing_framework_and_hal_documents_detected(self):
+        with tempfile.TemporaryDirectory() as root:
+            errors = AUDIT.workdir_audit(Path(root), "beyond2lte")
+            for code in ("E720", "E722", "E723", "E724", "E725", "E726", "E727", "E728"):
+                self.assertTrue(any(code in x for x in errors), (code, errors))
+
+    def test_vendor_donor_identity_is_detected(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            file = work / "vendor/build.prop"
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text("ro.product.vendor.device=o1s\n")
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertTrue(any("E722" in x for x in errors))
+
+    def test_system_ui_with_invalid_zip_is_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            path = work / AUDIT.SYSTEM_UI_PATHS[0]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"not an apk")
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertTrue(any("E725" in x for x in errors))
+
+    def test_valid_synthetic_archives_do_not_raise_archive_error(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            for p in AUDIT.FRAMEWORK_ARCHIVES:
+                dest = work / p
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(dest, "w") as archive:
+                    archive.writestr("classes.dex", b"synthetic")
+            errors = AUDIT.workdir_audit(work, "beyond2lte")
+            self.assertFalse(any("E724" in x for x in errors))
+
+
+if __name__ == "__main__":
+    unittest.main()
