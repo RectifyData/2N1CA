@@ -24,9 +24,11 @@ TARGETS = {
 OVERLAY_FILES = ("arrays.xml", "bools.xml", "dimens.xml", "integers.xml", "strings.xml")
 FRAMEWORK_ARCHIVES = (
     "system/system/framework/framework.jar",
+    "system/system/framework/framework-res.apk",
     "system/system/framework/services.jar",
     "system/system/framework/telephony-common.jar",
     "system/system/framework/ssrm.jar",
+    "system/system/priv-app/SamsungDeviceHealthManagerService/SamsungDeviceHealthManagerService.apk",
     "system/system/priv-app/SecSettings/SecSettings.apk",
     "system/system/priv-app/SamsungCamera/SamsungCamera.apk",
 )
@@ -114,6 +116,11 @@ def workdir_audit(work: Path, device: str) -> list[str]:
         errors.append("E722: vendor/device mismatch; donor vendor must not replace S10 vendor")
     if sysprop.get("ro.build.version.sdk") != "36":
         errors.append("E723: Android 16 framework SDK 36 not found")
+    if sysprop.get("ro.build.version.oneui") != "80500":
+        errors.append("E731: One UI 8.5 framework version 80500 not found")
+    vendor_sdk = vendor.get("ro.build.version.sdk", "")
+    if vendor_sdk and vendor_sdk != "31":
+        errors.append(f"E732: unexpected stock Exynos9820 vendor SDK {vendor_sdk}")
     for relative in FRAMEWORK_ARCHIVES:
         p = work / relative
         if not p.is_file() or not zipfile.is_zipfile(p):
