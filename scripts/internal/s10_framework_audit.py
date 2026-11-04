@@ -165,6 +165,17 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
         apk = work / "system/system/priv-app" / app / f"{app}.apk"
         if not apk.is_file() or not zipfile.is_zipfile(apk):
             errors.append(f"E740: Exynos9820 driver APK missing or corrupt: {app}")
+    for library in ("lib_SoundBooster_ver2080.so", "lib_SAG_EQ_ver2080.so",
+                    "libsoundboostereq_legacy.so"):
+        if (work / "system/system/lib64" / library).exists():
+            errors.append(f"E741: leftover foreign SoundBooster component: {library}")
+    gpu_dir = work / "system/system/priv-app"
+    if gpu_dir.is_dir():
+        for app in gpu_dir.iterdir():
+            if re.fullmatch(r"(?:Dev)?GameDriver-EX[0-9]+", app.name) and (
+                not app.name.endswith("-EX9820")
+            ):
+                errors.append(f"E742: unrelated GPU driver retained from donor: {app.name}")
     # Thermal policy names must have matching assets in the actual final
     # SamsungDeviceHealthManagerService APK. Never substitute S22 thermal data.
     target_config = (Path(__file__).resolve().parents[2] / "target" / device / "config.sh")
