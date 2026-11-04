@@ -41,7 +41,18 @@ if [ -f "$SRC_DIR/target/$TARGET_CODENAME/vintf/manifest.xml" ]; then
     LOG "- Adding /system/system/etc/vintf/manifest.xml"
     EVAL "cp -a \"$SRC_DIR/target/$TARGET_CODENAME/vintf/manifest.xml\" \"$WORK_DIR/system/system/etc/vintf/manifest.xml\""
 elif [ -n "$S10_STOCK_VINTF" ]; then
-    S10_COPY_VINTF "manifest.xml" || return 1
+    # Android 16 framework HAL registrations are owned by the donor system.
+    # Replacing them with Android 12 stock SYSTEM manifest silently removes
+    # framework services. The S10 vendor manifest remains in /vendor.
+    S10_FRAMEWORK_MANIFEST="$WORK_DIR/system/system/etc/vintf/manifest.xml"
+    if [[ ! -s "$S10_FRAMEWORK_MANIFEST" ]]; then
+        ABORT "E672: Android 16 framework manifest absent; refusing S10 VINTF port"
+    fi
+    if ! python3 -c 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])' "$S10_FRAMEWORK_MANIFEST"; then
+        ABORT "E673: Malformed Android 16 framework manifest"
+    fi
+    LOG "- Retaining Android 16 framework manifest; S10 vendor HALs come from stock vendor"
+    unset S10_FRAMEWORK_MANIFEST
 elif [[ "$SOURCE_PLATFORM_SDK_VERSION" == "$TARGET_PLATFORM_SDK_VERSION" ]]; then
     ADD_TO_WORK_DIR "$TARGET_FIRMWARE" "system" "system/etc/vintf/manifest.xml"
 fi
