@@ -245,6 +245,15 @@ case "$TARGET_CODENAME" in
             LOGE "S10 legacy ZIP requested dynamic partitions; refusing to package"
             exit 1
         fi
+        # Prevent the updater from looking up /dt, /dtbo, /vendor_boot or
+        # /init_boot partitions that are not present in the verified S10 fstab.
+        # The required S10 kernel packaging must be designed and verified separately.
+        for image in dt.img dtbo.img init_boot.img vendor_boot.img; do
+            if [ -f "$TMP_DIR/$image" ]; then
+                LOGE "E526: Unsafe S10 kernel payload: $image has no validated partition mapping"
+                exit 1
+            fi
+        done
         ;;
 esac
 
