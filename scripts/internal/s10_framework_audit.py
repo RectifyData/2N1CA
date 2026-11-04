@@ -129,8 +129,11 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
         errors.append("E722: vendor/device mismatch; donor vendor must not replace S10 vendor")
     if sysprop.get("ro.build.version.sdk") != "36":
         errors.append("E723: Android 16 framework SDK 36 not found")
-    if sysprop.get("ro.build.version.oneui") != "80500":
-        errors.append("E731: One UI 8.5 framework version 80500 not found")
+    ui_version = sysprop.get("ro.build.version.oneui", "")
+    if not ui_version.isdecimal() or (
+        int(ui_version) // 10000, int(ui_version) % 10000 // 100
+    ) != (8, 5):
+        errors.append(f"E731: expected One UI 8.5 framework, found {ui_version!r}")
     vendor_sdk = vendor.get("ro.build.version.sdk", "")
     if vendor_sdk and vendor_sdk != "31":
         errors.append(f"E732: unexpected stock Exynos9820 vendor SDK {vendor_sdk}")
