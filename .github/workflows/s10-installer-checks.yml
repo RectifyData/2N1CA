@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh scripts/make_rom.sh; do
+          for f in prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh scripts/make_rom.sh scripts/internal/build_full_ota_zip.sh scripts/internal/create_target_files_zip.sh scripts/build_flashable_zip.sh; do
             bash -n "$f"
           done
       - name: Lint entry-point scripts
