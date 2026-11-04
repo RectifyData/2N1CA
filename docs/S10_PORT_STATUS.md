@@ -76,6 +76,17 @@ The experimental kernel CI compiles pinned
 revision `9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb`. Its output is a
 developer artifact, **not a validated Galaxy S10 ROM**.
 
+## Framework adaptation work
+
+- Imported S10-specific floating-feature profiles and framework-res overlays for all four variants.
+- Updated the build to obtain system device/model identity from matching S10 stock vendor properties instead of retaining the One UI donor's device identity.
+- Added a platform patch to install the appropriate stock S10 camera capability XML after validation. Actual camera HAL compatibility is still unverified.
+- Updated the VINTF patch path to prefer extracted S10 stock system manifests and compatibility matrices instead of silently retaining donor files. Android 16 checkvintf and vendor HAL compatibility still must be proven.
+- Added a per-variant framework audit: verifies profile and overlay XML, identity, framework/telephony/SSRM JARs, Settings, SystemUI, SamsungCamera, floating-feature XML, vendor SELinux metadata and VINTF XML before marking the work directory complete.
+- Existing UN1CA smali patches are applied using S10 target feature settings; they have not yet been verified against every One UI 8.5 APK/JAR method and vendor interface.
+
+**This source is still not a boot-verified or flash-safe ROM.** The framework audit checks file structure and consistency, not runtime behavior. Thermal policy, Exynos9820 vendor HALs, APEX compatibility, SELinux, NFC, camera, audio, graphics, fingerprint, modem and recovery installation all remain hardware-dependent blockers.
+
 ## Remaining blockers
 
 1. Obtain per-variant stock PIT/firmware data and compare with the *actual*
