@@ -70,3 +70,26 @@ SOURCE_WLAN_SUPPORT_MOBILEAP_WIFISHARING_LITE=false
 SOURCE_WLAN_SUPPORT_SWITCH_FOR_INDIVIDUAL_APPS=true
 SOURCE_WLAN_SUPPORT_TWT_CONTROL=true
 SOURCE_WLAN_SUPPORT_WIFI_TO_CELLULAR=true
+
+# 2N1CA S10-only experimental donor selection.
+# Samsung confirms the Galaxy S25 FE (SM-S731B) received One UI 8.5 /
+# Android 16. This firmware is NOT hardware-compatible with Exynos9820
+# without further porting. Validate the actually extracted One UI version.
+case "${TARGET_CODENAME:-}" in
+    beyond0lte|beyond1lte|beyond2lte|beyondx)
+        SOURCE_FIRMWARE="${S10_ONEUI_85_SOURCE_FIRMWARE:-SM-S731B/EUX/RZCY828JTZM}"
+        SOURCE_EXTRA_FIRMWARES=()
+        SOURCE_PLATFORM_SDK_VERSION=36
+        SOURCE_PRODUCT_SHIPPING_API_LEVEL=36
+        SOURCE_BOARD_API_LEVEL=36
+        SOURCE_SUPER_GROUP_NAME="group_basic"
+        SOURCE_CAMERA_SUPPORT_MASS_APP_FLAVOR=true
+        SOURCE_COMMON_SUPPORT_DYN_RESOLUTION_CONTROL=false
+        SOURCE_FINGERPRINT_CONFIG_SENSOR="google_touch_display_optical,settings=3,aod_transition_animation"
+        SOURCE_LCD_CONFIG_HFR_DEFAULT_REFRESH_RATE="120"
+        SOURCE_LCD_CONFIG_HFR_MODE="2"
+        SOURCE_LCD_CONFIG_HFR_SUPPORTED_REFRESH_RATE="60,120"
+        SOURCE_LCD_CONFIG_HFR_SUPPORTED_REFRESH_RATE_NS="60"
+        SOURCE_LCD_SUPPORT_MDNIE_HW=false
+        ;;
+esac
