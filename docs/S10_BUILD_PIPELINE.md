@@ -42,10 +42,16 @@ during CI and emit precise E5xx diagnostics. They do not conceal real failures.
 
 ## Porting requirements
 
-The source branch currently does **not** contain production-ready
-`target/beyond*` directories or a compatible `platform/exynos9820` stack.
-Until those are integrated, `prepare.sh` deliberately stops before downloading
-firmware or creating a dangerous package.
+The port branch now contains all four S10 target configurations and
+an Exynos9820 platform scaffold, but the port is **not complete**. Build-time
+validation still stops on missing stock PIT information, unverified kernel
+components, unsupported donor versions and unresolved framework/HAL compatibility.
+
+The S10-specific framework audit checks per-device floating features and
+resource overlays and, when firmware is available, rebuilt framework archives,
+SystemUI, Samsung Camera, device/vendor identity, SELinux and VINTF evidence.
+The full build invokes it before caching target files. The audit does not
+establish bootability or compatibility of the proprietary HALs.
 
 Do not reuse S21 firmware installer scripts or dynamic partition handling.
 A compatible legacy S10 recovery fstab and verified partition sizes are
