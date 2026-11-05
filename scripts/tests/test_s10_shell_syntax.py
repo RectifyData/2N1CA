@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PATHS = [
+    ROOT / "external/make.sh",
     *ROOT.glob("*.sh"),
     *ROOT.glob("scripts/**/*.sh"),
     *ROOT.glob("target/beyond*/*.sh"),
@@ -24,6 +25,12 @@ CANDIDATES = sorted({p for p in PATHS if p.is_file() and not p.is_symlink()})
 
 
 class ShellSyntaxTests(unittest.TestCase):
+    def test_dependency_entrypoint_is_the_original_repo_symlink(self):
+        entry = ROOT / "scripts/build_dependencies.sh"
+        self.assertTrue(entry.is_symlink(), "Do not replace Git mode 120000 with executable contents")
+        self.assertEqual(str(entry.readlink()), "../external/make.sh")
+        self.assertTrue(entry.resolve().is_file())
+
     def test_bash_available(self):
         self.assertIsNotNone(shutil.which("bash"), "CI requires a real Bash parser")
 
