@@ -13,6 +13,10 @@ for executable in 7z brotli protoc bc unzip java git sha256sum; do
   command -v "$executable" >/dev/null 2>&1 ||
     s10_die "E603: Required build executable missing: $executable"
 done
+if [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+  bash "$ROOT/scripts/install_s10_checkvintf.sh" ||
+    s10_die "E760: Official Android 16 checkvintf is not provisioned"
+fi
 s10_info "Checking installer regression tests"
 python3 -m unittest discover -s "$ROOT/scripts/tests" -p 'test_*.py' -v
 s10_info "Checking shell syntax"
