@@ -70,6 +70,25 @@ jobs:
           print('Experimental kernel compiled and boot image header validated.')
           PY
           sha256sum "build/out/$DEVICE/"*.img > "kernel-sha256-$DEVICE.txt"
+      - name: Record SHA256 and build provenance (no boot approval)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/internal/s10_kernel_provenance.py \
+            --target "$DEVICE" --boot "kernel/build/out/$DEVICE/boot.img" \
+            --makefile kernel/Makefile --commit "$PINNED_KERNEL_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output "kernel/kernel-build-provenance-$DEVICE.json"
+          python3 - "$DEVICE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          p = Path("kernel") / ("kernel-build-provenance-" + sys.argv[1] + ".json")
+          evidence = json.loads(p.read_text())
+          assert evidence["compilation_verified"] is True
+          assert evidence["hardware_boot_verified"] is False
+          assert evidence["is_flash_safe"] is False
+          PY
       - name: Upload developer-only kernel output (NOT FLASH-SAFE)
         if: success()
         uses: actions/upload-artifact@v4
@@ -80,6 +99,7 @@ jobs:
             kernel/build/out/${{ env.DEVICE }}/dtb.img
             kernel/build/out/${{ env.DEVICE }}/dtbo.img
             kernel/kernel-sha256-${{ env.DEVICE }}.txt
+            kernel/kernel-build-provenance-${{ env.DEVICE }}.json
           retention-days: 2
           if-no-files-found: error
       - name: Safety notice
