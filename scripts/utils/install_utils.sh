@@ -42,6 +42,33 @@ GET_DEVICE_FROM_MOUNTPOINT()
         exit 1
     fi
 
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            # Only exact mount fields and the matching /dev/block partition
+            # basename may be used. Broad grep matching can redirect writes.
+            local expected="${MOUNTPOINT#/}"
+            case "$expected" in system|vendor|product|odm|boot) ;; *)
+                LOGE "E561: Disallowed S10 recovery partition: $MOUNTPOINT"
+                return 1 ;;
+            esac
+            local -a matched=()
+            mapfile -t matched < <(awk -v point="$MOUNTPOINT" \
+                '$1 !~ /^#/ && $2 == point { print $1 }' "$FSTAB_FILE")
+            if [[ "${#matched[@]}" -ne 1 ]]; then
+                LOGE "E562: Need exactly one recovery mapping for $MOUNTPOINT"
+                return 1
+            fi
+            if [[ "${matched[0]}" != /dev/block/* ||
+                  "${matched[0]##*/}" != "$expected" ||
+                  "${matched[0]}" =~ [[:space:]\;\$\`\(\)] ]]; then
+                LOGE "E563: Unsafe S10 block path for $MOUNTPOINT"
+                return 1
+            fi
+            printf '"%s"' "${matched[0]}"
+            return 0
+            ;;
+    esac
+
     if $TARGET_USE_DYNAMIC_PARTITIONS && IS_VALID_PARTITION_NAME "${MOUNTPOINT/\//}"; then
         echo -n "map_partition(\"${MOUNTPOINT/\//}\")"
     else
@@ -76,6 +103,49 @@ PRINT_ASSERTIONS()
 
     local DEVICE
     DEVICE="$(grep "^device" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+
+    # In third-party S10 recoveries ro.boot.em.model may be absent.
+    # Require a correct legacy codename; if a bootloader model IS supplied
+    # it must also match, so the missing-property fallback cannot mask a
+    # known wrong hardware model.
+    case "$DEVICE" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            local MODELS MODEL
+            IFS=';' read -r -a MODELS <<< "$(grep "^model=" <<< "$BUILD_INFO" | cut -d "=" -f 2-)"
+            if [ "${#MODELS[@]}" -eq 0 ] || [ -z "${MODELS[0]}" ]; then
+                LOGE "E3005: Missing S10 model allowlist for $DEVICE"
+                return 1
+            fi
+            echo -n '(getprop("ro.boot.em.model") == ""'
+            for MODEL in "${MODELS[@]}"; do
+                if [[ ! "$MODEL" =~ ^SM-G[0-9]{3}[A-Z]$ ]]; then
+                    LOGE "E3006: Invalid model assertion in build metadata"
+                    return 1
+                fi
+                echo -n ' || getprop("ro.boot.em.model") == "'
+                echo -n "$MODEL"
+                echo -n '"'
+            done
+            echo -n ') && (getprop("ro.product.device") == "'
+            echo -n "$DEVICE"
+            echo -n '" || getprop("ro.build.product") == "'
+            echo -n "$DEVICE"
+            echo -n '"'
+            if [[ "$DEVICE" == *lte ]]; then
+                echo -n ' || getprop("ro.product.device") == "'
+                echo -n "${DEVICE%lte}"
+                echo -n '"'
+            fi
+            for MODEL in "${MODELS[@]}"; do
+                echo -n ' || getprop("ro.boot.em.model") == "'
+                echo -n "$MODEL"
+                echo -n '"'
+            done
+            echo -n ') || abort("E3004: Wrong Galaxy S10 model or codename; installation stopped.");'
+            echo
+            return 0
+            ;;
+    esac
 
     if [ "$(grep "^model" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)" ]; then
         local TARGET_ASSERT_MODEL
@@ -177,7 +247,14 @@ PRINT_HEADER()
     echo    'ui_print(" ");'
     PRINT_SEPARATOR
     echo -n 'ui_print("'
-    echo -n "UN1CA $ROM_VERSION for $TARGET_NAME"
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            echo -n "2N1CA $ROM_VERSION for $TARGET_NAME"
+            ;;
+        *)
+            echo -n "UN1CA $ROM_VERSION for $TARGET_NAME"
+            ;;
+    esac
     echo    '");'
     echo    'ui_print("Coded by salvo_giangri @XDAforums");'
     PRINT_SEPARATOR

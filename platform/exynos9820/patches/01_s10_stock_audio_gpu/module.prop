@@ -1,0 +1,4 @@
+id=s10_stock_audio_gpu
+name=Galaxy S10 stock audio and GPU framework components
+author=2N1CA contributors
+description=Restore documented Exynos9820 stock SoundBooster and GPU apps from matching target firmware

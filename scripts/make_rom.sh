@@ -162,6 +162,36 @@ if $BUILD_ROM; then
 
     BUILD_APKS
 
+    # Verify S10 framework archives, product overlays, vendor identity and
+    # VINTF after APK rebuilding; reject failed builds before caching outputs.
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+        LOG_STEP_IN true "Verifying S10 framework, overlays and VINTF"
+        python3 "$SRC_DIR/scripts/internal/s10_framework_audit.py" \
+            --source "$SRC_DIR" --device "$TARGET_CODENAME" \
+            --work-dir "$WORK_DIR" \
+            --stock-target "$FW_DIR/$TARGET_FIRMWARE_PATH" \
+            --vendor-abi "$OUT_DIR/target/$TARGET_CODENAME/vendor-abi.env" \
+            --json-out "$OUT_DIR/target/$TARGET_CODENAME/framework-audit.json" || exit 1
+        # Compare the actual Android 16 framework HAL contract with the
+        # extracted Exynos9820 stock vendor and ODM. No synthetic PASS.
+        S10_VINTF_ARGS=()
+        if [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+            S10_VINTF_ARGS=(--require-tool)
+        fi
+        python3 "$SRC_DIR/scripts/internal/s10_checkvintf.py" \
+            --work-dir "$WORK_DIR" \
+            --vendor-abi "$OUT_DIR/target/$TARGET_CODENAME/vendor-abi.env" \
+            --report "$OUT_DIR/target/$TARGET_CODENAME/checkvintf.json" \
+            "${S10_VINTF_ARGS[@]}" || exit 1
+        python3 "$SRC_DIR/scripts/internal/s10_init_audit.py" "$WORK_DIR" \
+            --report "$OUT_DIR/target/$TARGET_CODENAME/init-audit.json" || exit 1
+        python3 "$SRC_DIR/scripts/internal/s10_security_audit.py" \
+            --stock "$FW_DIR/$TARGET_FIRMWARE_PATH" \
+            --work "$WORK_DIR" \
+            --report "$OUT_DIR/target/$TARGET_CODENAME/security-audit.json" || exit 1
+        LOG_STEP_OUT
+    fi
+
     echo -n "$(GET_WORK_DIR_HASH)" > "$WORK_DIR/.completed"
 fi
 
@@ -173,6 +203,13 @@ if $BUILD_TARGET_FILES || $BUILD_FLASHABLE_ZIP; then
         ZIP_FILE_NAME+="$ROM_VERSION"
     fi
     ZIP_FILE_NAME+="-target_files.zip"
+
+    # A forced rebuild must not silently reuse a target-files archive from
+    # an older firmware extraction or from a previous run.
+    if $FORCE && [ -f "$OUT_DIR/$ZIP_FILE_NAME" ]; then
+        LOGW "Removing stale target-files archive for forced build: $ZIP_FILE_NAME"
+        rm -f "$OUT_DIR/$ZIP_FILE_NAME" || exit 1
+    fi
 
     if [ ! -f "$OUT_DIR/$ZIP_FILE_NAME" ]; then
         LOG_STEP_IN true "Creating target-files zip"

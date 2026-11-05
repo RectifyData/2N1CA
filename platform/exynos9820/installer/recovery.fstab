@@ -1,0 +1,11 @@
+# Exynos9820 legacy recovery block map.
+# Reference: ArtisanROM_old/sixteen-old platform/exynos9820/patches/vendor/vendor/etc/fstab.exynos9820.
+# Verified block targets must be cross-checked with each device's real PIT
+# before installing on real hardware. No dynamic partitions or /super.
+#<block_device>              <mount> <fstype> <options> <flags>
+/dev/block/by-name/system    /system   ext4    ro       wait
+/dev/block/by-name/vendor    /vendor   ext4    ro       wait
+/dev/block/by-name/product   /product  ext4    ro       wait
+/dev/block/by-name/odm       /odm      ext4    ro       wait
+/dev/block/by-name/boot      /boot     emmc    defaults defaults
+# EFS / radio / modem / bootloader / cache / userdata intentionally excluded.

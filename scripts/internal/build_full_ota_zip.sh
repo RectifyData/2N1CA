@@ -67,22 +67,30 @@ GENERATE_OTA_METADATA()
     local PROTO_FILE="$SRC_DIR/external/android-tools/vendor/build/tools/releasetools/ota_metadata.proto"
 
     local DEVICE
-    local RELEASE
+    local SDK_LEVEL
     local INCREMENTAL
     local TIMESTAMP
     local SECURITY_PATCH_LEVEL
     local FINGERPRINT
 
     DEVICE="$(grep "^device" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
-    RELEASE="$(grep "^os_version" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    SDK_LEVEL="$(grep "^sdk_level" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     INCREMENTAL="$(grep "^build_incremental" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     TIMESTAMP="$(grep "^build_date" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     SECURITY_PATCH_LEVEL="$(grep "^security_patch" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
-    FINGERPRINT="$(grep "^source_fingerprint" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    FINGERPRINT="$(grep "^target_fingerprint" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    if [[ ! "$SDK_LEVEL" =~ ^[0-9]+$ || -z "$FINGERPRINT" ]]; then
+        LOGE "E551: Invalid final SDK level or missing post-build fingerprint"
+        return 1
+    fi
 
     mkdir -p "$TMP_DIR/META-INF/com/android"
 
     # https://android.googlesource.com/platform/build/+/refs/tags/android-15.0.0_r1/tools/releasetools/ota_utils.py#259
+    if [[ "$TARGET_CODENAME" == beyond* && ! -f "$PROTO_FILE" ]]; then
+        LOGE "E552: OTA metadata protobuf schema absent from host tools"
+        return 1
+    fi
     if [ -f "$PROTO_FILE" ]; then
         local MESSAGE
 
@@ -92,7 +100,7 @@ GENERATE_OTA_METADATA()
         MESSAGE+=", build: \\\"$FINGERPRINT\\\""
         MESSAGE+=", build_incremental: \\\"$INCREMENTAL\\\""
         MESSAGE+=", timestamp: $TIMESTAMP"
-        MESSAGE+=", sdk_level: \\\"$RELEASE\\\""
+        MESSAGE+=", sdk_level: \\\"$SDK_LEVEL\\\""
         MESSAGE+=", security_patch_level: \\\"$SECURITY_PATCH_LEVEL\\\"}"
 
         EVAL "protoc --encode=build.tools.releasetools.OtaMetadata --proto_path=\"$(dirname "$PROTO_FILE")\" \"$PROTO_FILE\" <<< \"$MESSAGE\" > \"$TMP_DIR/META-INF/com/android/metadata.pb\"" || exit 1
@@ -104,7 +112,7 @@ GENERATE_OTA_METADATA()
         echo "ota-type=BLOCK"
         echo "post-build=$FINGERPRINT"
         echo "post-build-incremental=$INCREMENTAL"
-        echo "post-sdk-level=$RELEASE"
+        echo "post-sdk-level=$SDK_LEVEL"
         echo "post-security-patch-level=$SECURITY_PATCH_LEVEL"
         echo "post-timestamp=$TIMESTAMP"
         echo "pre-device=$DEVICE"
@@ -158,7 +166,10 @@ GENERATE_UPDATER_SCRIPT()
                 echo    'show_progress(0.100000, 0);'
             fi
             echo -n "block_image_update("
-            GET_DEVICE_FROM_MOUNTPOINT "/$p"
+            GET_DEVICE_FROM_MOUNTPOINT "/$p" || {
+                printf 'E546: Cannot resolve partition %s in recovery fstab\n' "$p" >&2
+                exit 1
+            }
             echo -n ', package_extract_file("'
             echo -n "$p.transfer.list"
             echo -n '"), "'
@@ -182,15 +193,21 @@ GENERATE_UPDATER_SCRIPT()
                 echo -n 'package_extract_file("'
                 echo -n "$b.img"
                 echo -n '", '
-                GET_DEVICE_FROM_MOUNTPOINT "/$b"
-                echo    ");"
+                GET_DEVICE_FROM_MOUNTPOINT "/$b" || {
+                    printf 'E547: Unsupported recovery kernel mount %s\n' "$b" >&2
+                    exit 1
+                }
+                echo    ') || abort("E4002: Failed to write kernel image.");'
             fi
         done
         if [ -f "$TMP_DIR/boot.img" ]; then
             echo    'ui_print("Installing boot image...");'
             echo -n 'package_extract_file("boot.img", '
-            GET_DEVICE_FROM_MOUNTPOINT "/boot"
-            echo    ");"
+            GET_DEVICE_FROM_MOUNTPOINT "/boot" || {
+                printf 'E548: Recovery fstab lacks a valid boot partition\n' >&2
+                exit 1
+            }
+            echo    ') || abort("E4003: Failed to write boot image.");'
         fi
 
         echo    'show_progress(0.100000, 10);'
@@ -215,7 +232,7 @@ fi
 TARGET_ZIP="$1"
 OUTPUT_FILE="$2"
 
-if ! unzip -l "$TARGET_ZIP" | grep -q "build_info.txt" || unzip -l "$TARGET_ZIP" | grep -q "META-INF"; then
+if ! unzip -p "$TARGET_ZIP" build_info.txt >/dev/null 2>&1; then
     LOGE "File not valid: ${TARGET_ZIP//$SRC_DIR\//}"
     exit 1
 fi
@@ -238,6 +255,40 @@ fi
 
 TARGET_USE_DYNAMIC_PARTITIONS="$(grep "^use_dynamic_partitions" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
 
+# Legacy S10 devices must not use the dynamic-partition updater from newer models.
+case "$TARGET_CODENAME" in
+    beyond0lte|beyond1lte|beyond2lte|beyondx)
+        if [[ "$TARGET_USE_DYNAMIC_PARTITIONS" != "false" ]]; then
+            LOGE "S10 legacy ZIP requested dynamic partitions; refusing to package"
+            exit 1
+        fi
+        [[ -s "$TMP_DIR/boot.img" ]] || {
+            LOGE "E632: S10 flashable package requires an approved boot.img"
+            exit 1
+        }
+        # Direct invocations must not bypass the same approval and VINTF gate
+        # imposed by build.sh. Do not certify the package from a hash alone.
+        [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]] || {
+            LOGE "E560: S10 flashable builder requires strict VINTF mode"
+            exit 1
+        }
+        python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+            --target "$TARGET_CODENAME" \
+            --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+            --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+            --boot "$TMP_DIR/boot.img" || exit 1
+        # Prevent the updater from looking up /dt, /dtbo, /vendor_boot or
+        # /init_boot partitions that are not present in the verified S10 fstab.
+        # The required S10 kernel packaging must be designed and verified separately.
+        for image in dt.img dtbo.img init_boot.img vendor_boot.img; do
+            if [ -f "$TMP_DIR/$image" ]; then
+                LOGE "E526: Unsafe S10 kernel payload: $image has no validated partition mapping"
+                exit 1
+            fi
+        done
+        ;;
+esac
+
 if $TARGET_USE_DYNAMIC_PARTITIONS; then
     LOG "- Generating dynamic_partitions_op_list"
     GENERATE_OP_LIST
@@ -251,23 +302,32 @@ for p in $PARTITIONS_LIST; do
     LOG "- Converting $p.img to $p.new.dat"
     EVAL "img2sdat -o \"$TMP_DIR\" --tgt-block-map \"$TMP_DIR/$p.map\" \"$TMP_DIR/$p.img\"" || exit 1
     rm -f "$TMP_DIR/$p.img" "$TMP_DIR/$p.map"
+    # Full block OTAs can have an empty patch file; edify still references it.
+    # Include the empty payload explicitly instead of an Error 1 at install time.
+    [ -f "$TMP_DIR/$p.patch.dat" ] || : > "$TMP_DIR/$p.patch.dat"
 
     if ! $DEBUG; then
         LOG "- Compressing $p.new.dat"
         # https://android.googlesource.com/platform/build/+/refs/tags/android-15.0.0_r1/tools/releasetools/common.py#3585
         EVAL "brotli --quality=6 --output=\"$TMP_DIR/$p.new.dat.br\" \"$TMP_DIR/$p.new.dat\"" || exit 1
+        # A ZIP CRC validates only the container, not the Brotli stream.
+        # Check Brotli's internal integrity before removing the raw data.
+        if ! brotli --test "$TMP_DIR/$p.new.dat.br"; then
+            LOGE "E527: $p.new.dat.br failed Brotli integrity check"
+            exit 1
+        fi
         rm -f "$TMP_DIR/$p.new.dat"
     fi
 done
 
 LOG "- Generating updater-script"
-GENERATE_UPDATER_SCRIPT
+GENERATE_UPDATER_SCRIPT || exit 1
 
 LOG "- Generating build_info.txt"
 PRINT_BUILD_INFO "$BUILD_INFO" > "$TMP_DIR/build_info.txt" || exit 1
 
 LOG "- Generating OTA metadata"
-GENERATE_OTA_METADATA
+GENERATE_OTA_METADATA || exit 1
 
 if [ -d "$SRC_DIR/target/$TARGET_CODENAME/installer/root" ]; then
     LOG "- Copying target custom install files"
@@ -298,5 +358,20 @@ if ! $DEBUG || $ROM_IS_OFFICIAL; then
 else
     mv -f "$TMP_DIR/rom.zip" "$OUTPUT_FILE"
 fi
+
+
+# Validate ZIP references and integrity before reporting packaging success.
+case "$TARGET_CODENAME" in
+    beyond0lte|beyond1lte|beyond2lte|beyondx)
+        if ! python3 "$SRC_DIR/scripts/internal/validate_flashable_zip.py" \
+            "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" \
+            --layout "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" --deep \
+            --boot-manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json"; then
+            LOGE "Produced ZIP failed S10 installer validation; refusing to publish"
+            rm -f "$OUTPUT_FILE"
+            exit 1
+        fi
+        ;;
+esac
 
 exit 0

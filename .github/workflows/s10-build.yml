@@ -1,0 +1,110 @@
+name: 2N1CA S10 sync and build
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Galaxy S10 target'
+        required: true
+        type: choice
+        default: beyond2lte
+        options: [beyond0lte, beyond1lte, beyond2lte, beyondx]
+      mode:
+        description: 'Config check or full firmware build'
+        type: choice
+        required: true
+        default: config
+        options: [config, target-files, build]
+
+concurrency:
+  group: s10-build-${{ github.ref }}-${{ inputs.device }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    name: Check S10 source and installer
+    runs-on: ubuntu-24.04
+    env:
+      DEVICE: ${{ inputs.device }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate host scripts and source metadata
+        shell: bash
+        run: |
+          set -eo pipefail
+          for f in prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh; do bash -n "$f"; done
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+          source ./buildenv.sh "$DEVICE"
+          test "$TARGET_CODENAME" = "$DEVICE"
+          test "$TARGET_PLATFORM" = "exynos9820"
+          test "$TARGET_USE_DYNAMIC_PARTITIONS" = "false"
+          test "$TARGET_OS_FILE_SYSTEM_TYPE" = "ext4"
+          echo 'Configuration validation passed. Flash safety/bootability NOT established.'
+
+  compile:
+    name: Experimental full ROM packaging
+    needs: config
+    if: ${{ inputs.mode != 'config' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      DEVICE: ${{ inputs.device }}
+      S10_ONEUI_85_SOURCE_FIRMWARE: ${{ secrets.S10_SOURCE_FIRMWARE }}
+      S10_ONEUI_85_SOURCE_VERSION: ${{ secrets.S10_SOURCE_VERSION }}
+      S10_TARGET_FIRMWARE: ${{ secrets.S10_TARGET_FIRMWARE }}
+      S10_TARGET_FIRMWARE_VERSION: ${{ secrets.S10_TARGET_FIRMWARE_VERSION }}
+      S10_CHECKVINTF_URL: ${{ secrets.S10_CHECKVINTF_URL }}
+      S10_CHECKVINTF_SHA256: ${{ secrets.S10_CHECKVINTF_SHA256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Prepare Linux packaging dependencies
+        shell: bash
+        run: |
+          set -eo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h
+          sudo apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            attr bc brotli ccache clang ffmpeg jq default-jdk-headless libbrotli-dev libbz2-dev \
+            libgtest-dev libprotobuf-dev libunwind-dev libpcre2-dev \
+            libzstd-dev lld protobuf-compiler webp python3 python3-venv \
+            libssl-dev libelf-dev unzip zip p7zip-full
+          sudo modprobe erofs || true
+          sudo modprobe f2fs || true
+          df -h
+      - name: Generate S10 target and flashable ZIP (fails closed until kernel is validated)
+        shell: bash
+        run: |
+          set -eo pipefail
+          if [[ "${{ inputs.mode }}" == "target-files" ]]; then
+            bash build.sh "$DEVICE" --target-files-only
+          else
+            bash build.sh "$DEVICE"
+          fi
+      - name: Collect validated experimental artifacts
+        if: ${{ success() && inputs.mode == 'build' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: EXPERIMENTAL-UNVERIFIED-2N1CA-${{ env.DEVICE }}
+          path: |
+            out/2N1CA_*.zip
+            out/2N1CA_*.zip.sha256
+          if-no-files-found: error
+          retention-days: 2
+      - name: Collect non-flashable target-files for source diagnostics
+        if: ${{ success() && inputs.mode == 'target-files' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DO-NOT-FLASH-S10-target-files-${{ env.DEVICE }}
+          path: out/${{ env.DEVICE }}_*-target_files.zip
+          if-no-files-found: error
+          retention-days: 2
+      - name: Notice
+        if: always()
+        run: |
+          echo 'No device was flashed during this workflow.'
+          echo 'Successful packaging does not establish that this ROM boots on the S10.'

@@ -64,8 +64,21 @@ GENERATE_BUILD_INFO()
 
     SOURCE_FINGERPRINT="$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/system/system/build.prop" "ro.system.build.fingerprint")"
     SOURCE_FINGERPRINT="${SOURCE_FINGERPRINT//$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/system/system/build.prop" "ro.build.product")/$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")}"
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+        # Post-OTA state must match final S10 system rather than donor/stock.
+        TARGET_FINGERPRINT="$(GET_PROP "system" "ro.system.build.fingerprint")"
+        [[ -n "$TARGET_FINGERPRINT" ]] ||
+            TARGET_FINGERPRINT="$(GET_PROP "system" "ro.build.fingerprint")"
+        if [[ -z "$TARGET_FINGERPRINT" ||
+              "$TARGET_FINGERPRINT" == *"S731"* ||
+              "$TARGET_FINGERPRINT" != *"$TARGET_CODENAME"* ]]; then
+            LOGE "E550: Missing or donor-derived final S10 system fingerprint"
+            return 1
+        fi
+    else
     TARGET_FINGERPRINT="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/build.prop" "ro.system.build.fingerprint")"
     TARGET_FINGERPRINT="${TARGET_FINGERPRINT//$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/build.prop" "ro.build.product")/$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")}"
+    fi
 
     {
         echo -n "device="
@@ -77,6 +90,7 @@ GENERATE_BUILD_INFO()
         echo -n "timestamp="
         [ "$(GET_PROP "system" "ro.unica.timestamp")" ] && GET_PROP "system" "ro.unica.timestamp" || echo "$ROM_BUILD_TIMESTAMP"
         echo "os_version=$(GET_PROP "system" "ro.build.version.release")"
+        echo "sdk_level=$(GET_PROP "system" "ro.build.version.sdk")"
         echo "oneui_version=$(GET_PROP "system" "ro.build.version.oneui")"
         echo "build_incremental=$(GET_PROP "system" "ro.build.version.incremental")"
         echo "build_date=$(GET_PROP "system" "ro.build.date.utc")"
@@ -141,6 +155,13 @@ fi
 
 if [ -d "$WORK_DIR/kernel" ]; then
     KERNEL_BINS="boot.img dt.img dtbo.img init_boot.img vendor_boot.img"
+    # S10 legacy devices do not have the newer Samsung boot image layout.
+    # Do not package dt/dtbo/init_boot/vendor_boot images from an unrelated donor.
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            KERNEL_BINS="boot.img"
+            ;;
+    esac
 
     for f in $KERNEL_BINS; do
         [ ! -f "$WORK_DIR/kernel/$f" ] && continue
@@ -154,8 +175,23 @@ if [ -d "$WORK_DIR/kernel" ]; then
     done
 fi
 
+# Target-files-only output remains explicitly non-flashable. A flashable
+# image requires byte-for-byte validation of the boot.img actually packaged.
+if [[ "${TARGET_PLATFORM:-}" == "exynos9820" &&
+      "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+    [[ -s "$TMP_DIR/boot.img" ]] || {
+        LOGE "E632: S10 flashable build has no boot.img"
+        exit 1
+    }
+    python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+        --target "$TARGET_CODENAME" \
+        --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+        --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+        --boot "$TMP_DIR/boot.img" || exit 1
+fi
+
 LOG "- Generating build_info.txt"
-GENERATE_BUILD_INFO
+GENERATE_BUILD_INFO || exit 1
 
 LOG "- Creating zip"
 rm -f "$OUTPUT_FILE"

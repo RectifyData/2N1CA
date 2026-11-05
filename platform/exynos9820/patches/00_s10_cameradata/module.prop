@@ -1,0 +1,4 @@
+id=s10_stock_cameradata
+name=Galaxy S10 stock camera capability data
+author=2N1CA contributors
+description=Use verified S10 stock camera-feature.xml instead of S22 donor feature claims

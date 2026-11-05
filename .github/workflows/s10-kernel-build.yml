@@ -1,0 +1,109 @@
+name: Experimental Exynos9820 kernel build
+on:
+  push:
+    branches: ['port/s10-exynos9820']
+    paths: ['.github/workflows/s10-kernel-build.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kernel:
+    name: Compile experimental kernel (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    concurrency:
+      group: exynos9820-kernel-${{ github.ref }}-${{ matrix.target }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [beyond0lte, beyond1lte, beyond2lte, beyondx]
+    env:
+      DEVICE: ${{ matrix.target }}
+      PINNED_KERNEL_SHA: 9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Ubuntu Actions kernel is managed by GitHub. Do not install
+          # missing linux-modules-extra-$(uname -r) packages.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            bc bison build-essential ccache cpio curl flex libarchive-tools \
+            libelf-dev libssl-dev python3 rsync unzip xz-utils zip
+          df -h
+      - name: Clone pinned Exynos9820 kernel sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init kernel
+          git -C kernel remote add origin https://github.com/Android-Artisan/android_kernel_samsung_exynos9820.git
+          git -C kernel fetch --depth=1 --filter=blob:none origin "$PINNED_KERNEL_SHA"
+          git -C kernel checkout --detach FETCH_HEAD
+          test "$(git -C kernel rev-parse HEAD)" = "$PINNED_KERNEL_SHA"
+          git -C kernel submodule update --init --recursive --depth=1
+      - name: Compile selected S10 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd kernel
+          bash ./build.sh -m "$DEVICE" -k n -r n
+          test -s "build/out/$DEVICE/boot.img"
+          test -s "build/out/$DEVICE/dtb.img"
+          test -s "build/out/$DEVICE/dtbo.img"
+          # Do not silently accept symlinks/empty auxiliary images.
+          test ! -L "build/out/$DEVICE/boot.img"
+          test ! -L "build/out/$DEVICE/dtb.img"
+          test ! -L "build/out/$DEVICE/dtbo.img"
+          python3 - "$DEVICE" <<'PY'
+          import sys
+          from pathlib import Path
+          target = sys.argv[1]
+          image = Path('build/out') / target / 'boot.img'
+          with image.open('rb') as stream:
+              assert stream.read(8) == b'ANDROID!', 'Boot image does not have Android header'
+          print('Experimental kernel compiled and boot image header validated.')
+          PY
+          sha256sum "build/out/$DEVICE/"*.img > "kernel-sha256-$DEVICE.txt"
+      - name: Record SHA256 and build provenance (no boot approval)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/internal/s10_kernel_provenance.py \
+            --target "$DEVICE" --boot "kernel/build/out/$DEVICE/boot.img" \
+            --makefile kernel/Makefile --commit "$PINNED_KERNEL_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output "kernel/kernel-build-provenance-$DEVICE.json"
+          python3 - "$DEVICE" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          p = Path("kernel") / ("kernel-build-provenance-" + sys.argv[1] + ".json")
+          evidence = json.loads(p.read_text())
+          assert evidence["compilation_verified"] is True
+          assert evidence["hardware_boot_verified"] is False
+          assert evidence["is_flash_safe"] is False
+          PY
+      - name: Upload developer-only kernel output (NOT FLASH-SAFE)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DO-NOT-FLASH-exynos9820-${{ env.DEVICE }}
+          path: |
+            kernel/build/out/${{ env.DEVICE }}/boot.img
+            kernel/build/out/${{ env.DEVICE }}/dtb.img
+            kernel/build/out/${{ env.DEVICE }}/dtbo.img
+            kernel/kernel-sha256-${{ env.DEVICE }}.txt
+            kernel/kernel-build-provenance-${{ env.DEVICE }}.json
+          retention-days: 2
+          if-no-files-found: error
+      - name: Safety notice
+        if: always()
+        run: |
+          echo 'Kernel compilation DOES NOT prove bootability, display, radio, camera or other hardware functionality.'
+          echo 'These are experimental development artifacts. NEVER flash on an only device.'

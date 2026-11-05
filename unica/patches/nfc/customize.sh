@@ -4,6 +4,16 @@ _LOG() { if $DEBUG; then LOGW "$1"; else ABORT "$1"; fi }
 
 TARGET_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$TARGET_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$TARGET_FIRMWARE")"
 
+# Exynos9820 uses its stock SLSI NFC contract. Never bring in a modern NXP
+# fallback or unrelated S21 library for the S10 devices.
+if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+    S10_NFC_CHIP="$(GET_PROP "vendor" "ro.vendor.nfc.feature.chipname")"
+    if [[ -n "$S10_NFC_CHIP" && "$S10_NFC_CHIP" != SLSI* ]]; then
+        LOGE "E682: Expected stock S10 SLSI NFC vendor, got '$S10_NFC_CHIP'"
+        return 1
+    fi
+fi
+
 if [ -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/etc/libnfc-nci.conf" ]; then
     ADD_TO_WORK_DIR "$TARGET_FIRMWARE" "system" "system/etc/libnfc-nci.conf" 0 0 644 "u:object_r:system_file:s0"
 else
@@ -112,7 +122,7 @@ if [ -f "$WORK_DIR/system/system/lib/libnfc_sec_jni.so" ]; then
     fi
 elif [ -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/lib/libnfc_sec_jni.so" ] || \
         [ -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/lib64/libnfc_sec_jni.so" ]; then
-    if [ "$TARGET_PLATFORM_SDK_VERSION" -ge "36" ]; then
+    if [ "$TARGET_PLATFORM_SDK_VERSION" -ge "36" ] || [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
         ADD_TO_WORK_DIR "$TARGET_FIRMWARE" "system" "system/lib/libnfc_sec_jni.so" 0 0 644 "u:object_r:system_lib_file:s0"
     else
         ADD_TO_WORK_DIR "r11sxxx" "system" "system/lib/libnfc_sec_jni.so" 0 0 644 "u:object_r:system_lib_file:s0"
@@ -124,12 +134,12 @@ if [ -f "$WORK_DIR/system/system/lib64/libnfc_sec_jni.so" ]; then
         DELETE_FROM_WORK_DIR "system" "system/lib64/libnfc_sec_jni.so"
     fi
 elif [ -f "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/lib64/libnfc_sec_jni.so" ]; then
-    if [ "$TARGET_PLATFORM_SDK_VERSION" -ge "36" ]; then
+    if [ "$TARGET_PLATFORM_SDK_VERSION" -ge "36" ] || [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
         ADD_TO_WORK_DIR "$TARGET_FIRMWARE" "system" "system/lib64/libnfc_sec_jni.so" 0 0 644 "u:object_r:system_lib_file:s0"
     else
         ADD_TO_WORK_DIR "r11sxxx" "system" "system/lib64/libnfc_sec_jni.so" 0 0 644 "u:object_r:system_lib_file:s0"
     fi
 fi
 
-unset TARGET_FIRMWARE_PATH
+unset TARGET_FIRMWARE_PATH S10_NFC_CHIP
 unset -f _LOG

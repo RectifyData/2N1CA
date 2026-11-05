@@ -1,0 +1,94 @@
+name: S10 boot verification
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: S10 device codename
+        required: true
+        type: choice
+        default: beyond2lte
+        options: [beyond0lte, beyond1lte, beyond2lte, beyondx]
+      hardware_test:
+        description: Run non-destructive ADB boot verification on a connected self-hosted S10 runner
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  source-readiness:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate S10 source and scripts
+        shell: bash
+        env:
+          DEVICE: ${{ inputs.device }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do
+            bash -n "$script"
+          done < <(find platform target -type f -name 'config.sh' | sort)
+          for script in buildenv.sh prepare.sh download.sh build.sh verify.sh; do
+            bash -n "$script"
+          done
+          python3 -m compileall -q scripts/internal scripts/tests
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+          source ./buildenv.sh "$DEVICE"
+          test "$TARGET_CODENAME" = "$DEVICE"
+          test "$TARGET_PLATFORM" = exynos9820
+          test "$TARGET_USE_DYNAMIC_PARTITIONS" = false
+          test "$TARGET_OS_FILE_SYSTEM_TYPE" = ext4
+          python3 scripts/internal/s10_framework_audit.py --device "$DEVICE"
+      - name: Scope of verification
+        run: |
+          echo 'Source readiness only. No kernel was booted, no ROM was flashed.'
+          echo 'Hardware verification requires a connected, already-booted S10.'
+
+  hardware-boot:
+    if: ${{ inputs.hardware_test }}
+    needs: source-readiness
+    runs-on: [self-hosted, linux, s10-adb]
+    timeout-minutes: 12
+    env:
+      DEVICE: ${{ inputs.device }}
+    steps:
+      - name: Verify an existing Android boot via ADB (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v adb
+          adb start-server
+          serials="$(adb devices | awk 'NR>1 && $2=="device" {print $1}')"
+          count="$(printf '%s\n' "$serials" | sed '/^$/d' | wc -l)"
+          if [[ "$count" -ne 1 ]]; then
+            echo "Expected exactly one authorized ADB device; found $count" >&2
+            exit 1
+          fi
+          serial="$serials"
+          prop() { adb -s "$serial" shell getprop "$1" | tr -d '\r'; }
+          expected_model=""
+          case "$DEVICE" in
+            beyond0lte) expected_model="SM-G970" ;;
+            beyond1lte) expected_model="SM-G973" ;;
+            beyond2lte) expected_model="SM-G975" ;;
+            beyondx) expected_model="SM-G977" ;;
+          esac
+          model="$(prop ro.product.model)"
+          actual_device="$(prop ro.product.device)"
+          [[ "$actual_device" == "$DEVICE" ]] || { echo "Wrong device: $actual_device" >&2; exit 1; }
+          [[ "$model" == "$expected_model"* ]] || { echo "Wrong model: $model" >&2; exit 1; }
+          [[ "$(prop sys.boot_completed)" == 1 ]] || { echo 'Android boot not completed' >&2; exit 1; }
+          [[ "$(prop init.svc.zygote)" == running || "$(prop init.svc.zygote64)" == running ]] || {
+            echo 'Zygote is not running' >&2; exit 1;
+          }
+          [[ "$(prop init.svc.surfaceflinger)" == running ]] || {
+            echo 'SurfaceFlinger is not running' >&2; exit 1;
+          }
+          [[ "$(prop ro.build.version.sdk)" == 36 ]] || {
+            echo 'Device is not running expected Android 16 SDK 36' >&2; exit 1;
+          }
+          echo 'ADB confirms Android 16 completed boot and core graphics/runtime services are running.'
+          echo 'This does not establish a clean first boot, call/camera/NFC operation, or all hardware functionality.'

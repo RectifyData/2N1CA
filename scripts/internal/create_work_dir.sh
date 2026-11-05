@@ -5,6 +5,9 @@
 # [
 source "$SRC_DIR/scripts/utils/build_utils.sh" || exit 1
 
+# shellcheck source=scripts/lib/s10_model_allowed.sh
+source "$SRC_DIR/scripts/lib/s10_model_allowed.sh" || exit 1
+
 SOURCE_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$SOURCE_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$SOURCE_FIRMWARE")"
 TARGET_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$TARGET_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$TARGET_FIRMWARE")"
 
@@ -19,11 +22,60 @@ COPY_SOURCE_FIRMWARE()
             sed "/system_ext/d" "$FW_DIR/$SOURCE_FIRMWARE_PATH/fs_config-$f" > "$WORK_DIR/configs/fs_config-$f"
             if [[ "$f" == "product" ]]; then
                 LOG_STEP_IN
-                SET_PROP "product" "ro.product.product.name" "$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.name")"
+                SET_PROP "product" "ro.product.product.name" "$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.name")" || return 1
+                if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+                    # /product must not keep the S25 FE donor identity.
+                    local S10_PRODUCT_DEVICE S10_PRODUCT_MODEL
+                    S10_PRODUCT_DEVICE="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")"
+                    S10_PRODUCT_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.model")"
+                    [[ -n "$S10_PRODUCT_MODEL" ]] ||
+                        S10_PRODUCT_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.model")"
+                    [[ "$S10_PRODUCT_DEVICE" == "$TARGET_CODENAME" ||
+                       "$S10_PRODUCT_DEVICE" == "${TARGET_CODENAME%lte}" ]] || {
+                        LOGE "E663: Stock vendor identity inconsistent with S10 product"
+                        return 1
+                    }
+                    S10_MODEL_ALLOWED "$S10_PRODUCT_MODEL" || {
+                        LOGE "E664: Stock /product model not in target S10 model allowlist"
+                        return 1
+                    }
+                    SET_PROP "product" "ro.product.product.model" "$S10_PRODUCT_MODEL" || return 1
+                    SET_PROP "product" "ro.product.product.device" "$TARGET_CODENAME" || return 1
+                fi
                 LOG_STEP_OUT
             elif [[ "$f" == "system" ]]; then
                 LOG_STEP_IN
-                SET_PROP "system" "ro.product.device" "$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/odm/etc/build.prop" "ro.product.odm.device")"
+                if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+                    # Do not stamp Galaxy S22 donor identity into S10 framework properties.
+                    # Cross-check the actual stock vendor device before setting S10 identity.
+                    local STOCK_DEVICE STOCK_MODEL
+                    STOCK_DEVICE="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")"
+                    # Samsung stock vendor builds may use beyond0/1/2 aliases.
+                    local STOCK_ALIAS="${TARGET_CODENAME%lte}"
+                    if [[ "$STOCK_DEVICE" != "$TARGET_CODENAME" && "$STOCK_DEVICE" != "$STOCK_ALIAS" ]]; then
+                        LOGE "E660: target stock vendor identifies as '$STOCK_DEVICE', expected '$TARGET_CODENAME'"
+                        return 1
+                    fi
+                    STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.model")"
+                    if [ -z "$STOCK_MODEL" ]; then
+                        STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.model")"
+                    fi
+                    if [ -z "$STOCK_MODEL" ]; then
+                        STOCK_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/system/system/build.prop" "ro.product.model")"
+                    fi
+                    # Empty properties must never leave the One UI donor's S25
+                    # model baked into the S10 framework image.
+                    if ! S10_MODEL_ALLOWED "$STOCK_MODEL"; then
+                        LOGE "E661: S10 stock model is missing or not on the target model allowlist"
+                        return 1
+                    fi
+                    SET_PROP "system" "ro.product.device" "$TARGET_CODENAME" || return 1
+                    SET_PROP "system" "ro.product.system.device" "$TARGET_CODENAME" || return 1
+                    SET_PROP "system" "ro.product.model" "$STOCK_MODEL" || return 1
+                    SET_PROP "system" "ro.product.system.model" "$STOCK_MODEL" || return 1
+                else
+                    SET_PROP "system" "ro.product.device" "$(GET_PROP "$FW_DIR/$SOURCE_FIRMWARE_PATH/odm/etc/build.prop" "ro.product.odm.device")"
+                fi
                 LOG_STEP_OUT
             fi
         else
