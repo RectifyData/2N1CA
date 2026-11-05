@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Reject malformed or dangerous recovery ZIPs before distribution."""
 import argparse
+import hashlib
+import json
 import re
 import struct
 import sys
@@ -106,7 +108,7 @@ def inspect_transfers(archive, filenames, capacities, error):
             error("E540", f"{partition} transfer validation: {exc}")
 
 
-def validate(path, expected=None, deep=False, layout=None):
+def validate(path, expected=None, deep=False, layout=None, boot_manifest=None):
     problems = []
     def error(code, message):
         problems.append(f"{code}: {message}")
@@ -127,6 +129,11 @@ def validate(path, expected=None, deep=False, layout=None):
                     error("E502", f"Missing {required}")
                 elif z.getinfo(required).file_size == 0:
                     error("E503", f"Empty {required}")
+            # CRC must be examined even when other required files are absent.
+            if deep:
+                failed = z.testzip()
+                if failed:
+                    error("E530", f"ZIP CRC failure: {failed}")
             if any(p not in files for p in REQUIRED):
                 return problems
             info = properties(z.read("build_info.txt").decode("utf-8"))
@@ -165,6 +172,41 @@ def validate(path, expected=None, deep=False, layout=None):
                 error("E514", "ZIP contains block payloads without a block updater")
 
             if device in S10:
+                if "boot.img" not in files:
+                    error("E553", "S10 flashable archive has no boot.img")
+                else:
+                    info_boot = z.getinfo("boot.img")
+                    with z.open("boot.img") as stream:
+                        header = stream.read(48)
+                    if (info_boot.file_size < 4096 or len(header) < 44 or
+                        header[:8] != b"ANDROID!" or
+                        struct.unpack_from("<I", header, 8)[0] == 0 or
+                        struct.unpack_from("<I", header, 40)[0] > 4):
+                        error("E554", "S10 boot.img Android header is missing or invalid")
+                if boot_manifest is None:
+                    error("E555", "Missing independent, approved S10 boot SHA256 manifest")
+                else:
+                    try:
+                        evidence = json.loads(Path(boot_manifest).read_text())
+                        sha = evidence.get("boot_sha256", "")
+                        if (evidence.get("target") != device or
+                            not isinstance(sha, str) or
+                            not re.fullmatch(r"[a-f0-9]{64}", sha)):
+                            raise ValueError("wrong target or invalid boot digest")
+                        if "boot.img" in files:
+                            digest = hashlib.sha256()
+                            with z.open("boot.img") as stream:
+                                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                                    digest.update(block)
+                            if digest.hexdigest() != sha:
+                                error("E556", "S10 ZIP boot.img differs from approved boot artifact")
+                    except (OSError, ValueError, AttributeError, TypeError) as exc:
+                        error("E555", f"Invalid independent S10 boot approval: {exc}")
+                # Boot must actually be written to the boot partition.
+                boot_writes = [(src, dest) for src, dest in WRITE.findall(script)
+                               if src == "boot.img" and dest.rstrip("/").split("/")[-1] == "boot"]
+                if len(boot_writes) != 1:
+                    error("E557", "S10 updater does not write exactly one boot.img to /boot")
                 capacities = None
                 if layout is not None:
                     try:
@@ -218,10 +260,6 @@ def validate(path, expected=None, deep=False, layout=None):
                                   "format(\"/efs", "delete_recursive(\"/data"):
                     if operation in script:
                         error("E525", f"Unsafe S10 operation: {operation}")
-            if deep:
-                bad = z.testzip()
-                if bad:
-                    error("E530", f"ZIP CRC failure: {bad}")
     except (OSError, ValueError, UnicodeError, EOFError, zipfile.BadZipFile) as ex:
         error("E531", f"Could not validate ZIP: {ex}")
     return problems
@@ -233,8 +271,11 @@ def main():
     p.add_argument("--expected-device")
     p.add_argument("--deep", action="store_true")
     p.add_argument("--layout", type=Path, help="PIT-generated partition size manifest")
+    p.add_argument("--boot-manifest", type=Path,
+                   help="Independent S10 boot approval (not an entry in the ZIP)")
     args = p.parse_args()
-    problems = validate(args.zip, args.expected_device, args.deep, args.layout)
+    problems = validate(args.zip, args.expected_device, args.deep, args.layout,
+                        args.boot_manifest)
     for problem in problems:
         print(f"2N1CA installer validation failed [{problem}]", file=sys.stderr)
     if problems:
