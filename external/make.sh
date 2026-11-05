@@ -170,7 +170,6 @@ fi
 
 if $ANDROID_TOOLS; then
     ANDROID_TOOLS_CMDS=(
-        "git submodule foreach --recursive \"git am --abort || true\""
         "cmake -B \"build\" $(GET_CMAKE_FLAGS) -DANDROID_TOOLS_USE_BUNDLED_FMT=ON -DANDROID_TOOLS_USE_BUNDLED_LIBUSB=ON"
         "make -C \"build\" -j\"$(nproc)\""
         "find \"build/vendor\" -maxdepth 1 -type f -exec test -x {} \; -exec cp -a {} \"$TOOLS_DIR/bin\" \;"
@@ -192,8 +191,9 @@ if $ANDROID_TOOLS; then
 fi
 if $APKTOOL; then
     APKTOOL_CMDS=(
-        "git reset --hard"
-        "git apply \"$SRC_DIR/external/patches/apktool/0001-feat-support-aapt-optimization.patch\""
+        # Refuse to overwrite developer edits in the apktool checkout.
+        "test -z \"\$(git status --porcelain)\" || { echo 'E690: apktool contains uncommitted changes' >&2; exit 1; }"
+        "git apply --check \"$SRC_DIR/external/patches/apktool/0001-feat-support-aapt-optimization.patch\" && git apply \"$SRC_DIR/external/patches/apktool/0001-feat-support-aapt-optimization.patch\""
         "./gradlew build shadowJar"
         "cp -a \"scripts/linux/apktool\" \"$TOOLS_DIR/bin\""
         "cp -a \"brut.apktool/apktool-cli/build/libs/apktool-cli.jar\" \"$TOOLS_DIR/bin/apktool.jar\""
