@@ -5,6 +5,18 @@
 # [
 source "$SRC_DIR/scripts/utils/build_utils.sh" || exit 1
 
+# TARGET_ASSERT_MODEL is a Bash array; scalar interpolation only checks
+# element zero and incorrectly rejects variants such as SM-G975N.
+S10_MODEL_ALLOWED()
+{
+    local candidate="${1:-}" approved
+    [[ -n "$candidate" ]] || return 1
+    for approved in "${TARGET_ASSERT_MODEL[@]}"; do
+        [[ "$approved" == "$candidate" ]] && return 0
+    done
+    return 1
+}
+
 SOURCE_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$SOURCE_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$SOURCE_FIRMWARE")"
 TARGET_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$TARGET_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$TARGET_FIRMWARE")"
 
@@ -32,7 +44,7 @@ COPY_SOURCE_FIRMWARE()
                         LOGE "E663: Stock vendor identity inconsistent with S10 product"
                         return 1
                     }
-                    [[ -n "$S10_PRODUCT_MODEL" && ":$TARGET_ASSERT_MODEL:" == *":$S10_PRODUCT_MODEL:"* ]] || {
+                    S10_MODEL_ALLOWED "$S10_PRODUCT_MODEL" || {
                         LOGE "E664: Stock /product model not in target S10 model allowlist"
                         return 1
                     }
@@ -62,7 +74,7 @@ COPY_SOURCE_FIRMWARE()
                     fi
                     # Empty properties must never leave the One UI donor's S25
                     # model baked into the S10 framework image.
-                    if [ -z "$STOCK_MODEL" ] || [[ ":$TARGET_ASSERT_MODEL:" != *":$STOCK_MODEL:"* ]]; then
+                    if ! S10_MODEL_ALLOWED "$STOCK_MODEL"; then
                         LOGE "E661: S10 stock model is missing or not on the target model allowlist"
                         return 1
                     fi
