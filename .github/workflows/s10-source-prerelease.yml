@@ -5,9 +5,14 @@ on:
     paths:
       - '.github/workflows/s10-source-prerelease.yml'
       - 'docs/S10_PORT_STATUS.md'
-      - 'scripts/internal/s10_framework_audit.py'
-      - 'scripts/tests/test_s10_framework_audit.py'
-      - 'unica/configs/essi.sh'
+      - 'prepare.sh'
+      - 'download.sh'
+      - 'build.sh'
+      - 'verify.sh'
+      - 'scripts/**'
+      - 'unica/configs/**'
+      - 'unica/patches/**'
+      - '.github/workflows/s10-*.yml'
       - 'platform/exynos9820/**'
       - 'target/beyond*/**'
   workflow_dispatch:
