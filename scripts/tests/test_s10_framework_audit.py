@@ -14,6 +14,12 @@ SOURCE = Path(__file__).resolve().parents[2]
 
 
 class S10FrameworkTests(unittest.TestCase):
+    def test_s10_donor_never_uses_s22_exynos2200_thermal_defaults(self):
+        content = (SOURCE / "unica/configs/essi.sh").read_text()
+        self.assertNotIn("siop_r0s_exynos2200", content)
+        self.assertIn('SOURCE_DVFSAPP_CONFIG_SSRM_POLICY_FILENAME="${S10_DONOR_SSRM_POLICY:-UNVERIFIED_S25FE_SSRM}"', content)
+        self.assertIn('SOURCE_DVFSAPP_CONFIG_DVFS_POLICY_FILENAME="${S10_DONOR_DVFS_POLICY:-UNVERIFIED_S25FE_DVFS}"', content)
+
     def test_every_s10_target_overlay_and_feature_contract(self):
         for device in AUDIT.TARGETS:
             with self.subTest(device=device):

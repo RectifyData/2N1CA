@@ -82,6 +82,14 @@ s10_require_vendor_abi() {
     [[ "$value" =~ ^[0-9]+$ && "$value" -ge 28 && "$value" -le 36 ]] ||
       s10_die "E752: Missing or invalid stock vendor ABI value for $name: $value"
   done
+  grep -qxF "S10_VENDOR_PLATFORM_SDK=\"$TARGET_PLATFORM_SDK_VERSION\"" "$path" ||
+    s10_die "E753: Configured target SDK disagrees with stock vendor"
+  grep -qxF "S10_VENDOR_VNDK=\"$TARGET_VNDK_VERSION\"" "$path" ||
+    s10_die "E753: Configured target VNDK disagrees with stock vendor"
+  grep -qxF "S10_VENDOR_FIRST_API=\"$TARGET_PRODUCT_SHIPPING_API_LEVEL\"" "$path" ||
+    s10_die "E753: Configured target launch API disagrees with stock vendor"
+  grep -qxF "S10_VENDOR_BOARD_API=\"$TARGET_BOARD_API_LEVEL\"" "$path" ||
+    s10_die "E753: Configured board API disagrees with stock vendor"
 }
 
 # The donor thermal policy must be taken from the exact extracted S25 FE
