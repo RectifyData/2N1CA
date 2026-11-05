@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 from pathlib import Path
 import shutil
@@ -22,7 +23,8 @@ PARTITIONS = {
     "/system_ext": ("system_ext", "system/system/system_ext", "system/system_ext"),
 }
 
-def assemble(work: Path, binary: str = "checkvintf") -> list[str]:
+def assemble(work: Path, binary: str = "checkvintf",
+             vendor_abi: Path | None = None) -> list[str]:
     if not work.is_dir():
         raise ValueError(f"Missing ROM work directory: {work}")
     command = [binary, "--check-compat"]
@@ -34,13 +36,24 @@ def assemble(work: Path, binary: str = "checkvintf") -> list[str]:
             raise ValueError(f"Ambiguous {partition} layout: {matches}")
         if matches:
             command.extend(["--dirmap", f"{partition}:{matches[0].resolve()}"])
-    # S10 launched with Android 9; stock Android 12 vendor image uses VNDK 31.
-    command.extend(["--property", "ro.product.first_api_level=28"])
+    # The launch API must be derived from the exact S10 vendor ABI
+    # manifest, never assumed to be 28 in the host checker.
+    if vendor_abi is None or not vendor_abi.is_file():
+        raise ValueError("E765: No extracted stock vendor ABI manifest for checkvintf")
+    line = next((item.strip() for item in vendor_abi.read_text().splitlines()
+                 if item.startswith('S10_VENDOR_FIRST_API=')), "")
+    match = re.fullmatch(r'S10_VENDOR_FIRST_API="([0-9]{1,3})"', line)
+    if not match or not 28 <= int(match.group(1)) <= 36:
+        raise ValueError("E766: Invalid source-derived S10 first API level")
+    command.extend(["--property",
+                    f"ro.product.first_api_level={int(match.group(1))}"])
     return command
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--work-dir", type=Path, required=True)
+    p.add_argument("--vendor-abi", type=Path, required=True,
+                   help="ABI manifest derived from matching stock S10 vendor")
     p.add_argument("--tool", default="checkvintf")
     p.add_argument("--require-tool", action="store_true")
     p.add_argument("--report", type=Path)
@@ -49,7 +62,7 @@ def main() -> int:
               "device_boot_verified": False, "notes": "No hardware/kernel tests"}
     code = 2
     try:
-        command = assemble(args.work_dir, args.tool)
+        command = assemble(args.work_dir, args.tool, args.vendor_abi)
         binary = shutil.which(args.tool)
         if not binary:
             report["error"] = f"checkvintf missing: {args.tool}"
