@@ -5,17 +5,8 @@
 # [
 source "$SRC_DIR/scripts/utils/build_utils.sh" || exit 1
 
-# TARGET_ASSERT_MODEL is a Bash array; scalar interpolation only checks
-# element zero and incorrectly rejects variants such as SM-G975N.
-S10_MODEL_ALLOWED()
-{
-    local candidate="${1:-}" approved
-    [[ -n "$candidate" ]] || return 1
-    for approved in "${TARGET_ASSERT_MODEL[@]}"; do
-        [[ "$approved" == "$candidate" ]] && return 0
-    done
-    return 1
-}
+# shellcheck source=scripts/lib/s10_model_allowed.sh
+source "$SRC_DIR/scripts/lib/s10_model_allowed.sh" || exit 1
 
 SOURCE_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$SOURCE_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$SOURCE_FIRMWARE")"
 TARGET_FIRMWARE_PATH="$(cut -d "/" -f 1 -s <<< "$TARGET_FIRMWARE")_$(cut -d "/" -f 2 -s <<< "$TARGET_FIRMWARE")"
