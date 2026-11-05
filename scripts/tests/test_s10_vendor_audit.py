@@ -28,9 +28,22 @@ class VendorAuditTests(unittest.TestCase):
         (self.root / "vendor/etc/vintf").mkdir()
         (self.root / "vendor/etc/fstab.exynos9820").write_text(FSTAB)
         (self.root / "vendor/etc/vintf/manifest.xml").write_text("<manifest/>")
+        (self.root / "vendor/etc/selinux").mkdir()
+        for options in audit.CANDIDATE_HAL.values():
+            file = self.root / "vendor" / options[0]
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(b"synthetic HAL fixture")
 
     def test_legacy_vendor_structure(self):
         self.assertEqual(audit.inspect(self.root)["errors"], [])
+
+    def test_missing_required_hal_is_blocking(self):
+        (self.root / "vendor/lib64/hw/gralloc.exynos9820.so").unlink()
+        self.assertIn("E650", " ".join(audit.inspect(self.root)["errors"]))
+
+    def test_missing_selinux_is_blocking(self):
+        (self.root / "vendor/etc/selinux").rmdir()
+        self.assertIn("E651", " ".join(audit.inspect(self.root)["errors"]))
 
     def test_missing_fstab_fails(self):
         (self.root / "vendor/etc/fstab.exynos9820").unlink()

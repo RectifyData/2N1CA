@@ -8,6 +8,11 @@ source "$ROOT/scripts/lib/s10_pipeline.sh"
 DEVICE="$1"
 s10_require_target "$DEVICE"
 command -v python3 >/dev/null || s10_die "Python 3 is required"
+# Check all native prerequisites before downloading or repacking large images.
+for executable in 7z brotli protoc bc unzip java git sha256sum; do
+  command -v "$executable" >/dev/null 2>&1 ||
+    s10_die "E603: Required build executable missing: $executable"
+done
 s10_info "Checking installer regression tests"
 python3 -m unittest discover -s "$ROOT/scripts/tests" -p 'test_*.py' -v
 s10_info "Checking shell syntax"

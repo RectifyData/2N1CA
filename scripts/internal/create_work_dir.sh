@@ -19,7 +19,26 @@ COPY_SOURCE_FIRMWARE()
             sed "/system_ext/d" "$FW_DIR/$SOURCE_FIRMWARE_PATH/fs_config-$f" > "$WORK_DIR/configs/fs_config-$f"
             if [[ "$f" == "product" ]]; then
                 LOG_STEP_IN
-                SET_PROP "product" "ro.product.product.name" "$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.name")"
+                SET_PROP "product" "ro.product.product.name" "$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.name")" || return 1
+                if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
+                    # /product must not keep the S25 FE donor identity.
+                    local S10_PRODUCT_DEVICE S10_PRODUCT_MODEL
+                    S10_PRODUCT_DEVICE="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.device")"
+                    S10_PRODUCT_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/product/etc/build.prop" "ro.product.product.model")"
+                    [[ -n "$S10_PRODUCT_MODEL" ]] ||
+                        S10_PRODUCT_MODEL="$(GET_PROP "$FW_DIR/$TARGET_FIRMWARE_PATH/vendor/build.prop" "ro.product.vendor.model")"
+                    [[ "$S10_PRODUCT_DEVICE" == "$TARGET_CODENAME" ||
+                       "$S10_PRODUCT_DEVICE" == "${TARGET_CODENAME%lte}" ]] || {
+                        LOGE "E663: Stock vendor identity inconsistent with S10 product"
+                        return 1
+                    }
+                    [[ -n "$S10_PRODUCT_MODEL" && ":$TARGET_ASSERT_MODEL:" == *":$S10_PRODUCT_MODEL:"* ]] || {
+                        LOGE "E664: Stock /product model not in target S10 model allowlist"
+                        return 1
+                    }
+                    SET_PROP "product" "ro.product.product.model" "$S10_PRODUCT_MODEL" || return 1
+                    SET_PROP "product" "ro.product.product.device" "$TARGET_CODENAME" || return 1
+                fi
                 LOG_STEP_OUT
             elif [[ "$f" == "system" ]]; then
                 LOG_STEP_IN

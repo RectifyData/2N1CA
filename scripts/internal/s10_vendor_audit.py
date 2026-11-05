@@ -54,9 +54,11 @@ def inspect(root: Path) -> dict:
     for category, options in CANDIDATE_HAL.items():
         found = [opt for opt in options if (vendor / opt).exists()]
         if not found:
-            warnings.append(f"W650 no known {category} HAL blob in expected paths; inspect hardware firmware")
+            # Do not silently release without basic hardware components.
+            # Alternative firmware layouts can be added only with stock evidence.
+            errors.append(f"E650 missing {category} HAL baseline; checked: {', '.join(options)}")
     if not (vendor / "etc/selinux").is_dir():
-        warnings.append("W651 vendor SELinux policy path missing")
+        errors.append("E651 vendor SELinux policy path missing")
     return {"errors": errors, "warnings": warnings, "checked": str(root),
             "hardware_compatibility_verified": False}
 

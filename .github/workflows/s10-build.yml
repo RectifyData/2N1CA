@@ -63,9 +63,11 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h
           sudo apt-get update -qq
           DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
-            attr bc ccache clang ffmpeg jq libbrotli-dev libbz2-dev \
+            attr bc brotli ccache clang ffmpeg jq default-jdk-headless libbrotli-dev libbz2-dev \
             libgtest-dev libprotobuf-dev libunwind-dev libpcre2-dev \
             libzstd-dev lld protobuf-compiler webp python3 python3-venv \
             libssl-dev libelf-dev unzip zip p7zip-full
