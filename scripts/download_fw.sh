@@ -139,7 +139,26 @@ for i in "${FIRMWARES[@]}"; do
 
     LOG_STEP_IN
 
-    if ! $FORCE; then
+    if $DONOR_PINNED && ! $FORCE; then
+        # Never treat a newer Android release as a valid substitute for
+        # the pinned Android 16 One UI 8.5 donor.
+        if [[ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]] &&
+           [[ "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" == "$LATEST_FIRMWARE" ]] &&
+           python3 "$SRC_DIR/scripts/internal/validate_oneui_donor.py" \
+             "$FW_DIR/${MODEL}_${CSC}/system/system/build.prop" >/dev/null 2>&1; then
+            LOG "- Verified cached pinned donor; skipping firmware download"
+            LOG_STEP_OUT; LOG_STEP_OUT
+            continue
+        fi
+        if [[ -f "$ODIN_DIR/${MODEL}_${CSC}/.downloaded" ]] &&
+           [[ "$(cat "$ODIN_DIR/${MODEL}_${CSC}/.downloaded")" == "$LATEST_FIRMWARE" ]]; then
+            LOG "- Matching pinned donor archive already downloaded"
+            LOG_STEP_OUT; LOG_STEP_OUT
+            continue
+        fi
+    fi
+
+    if ! $FORCE && ! $DONOR_PINNED; then
         # Skip if firmware has been extracted and equal/newer than the one in FUS
         if [ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]; then
             if COMPARE_SEC_BUILD_VERSION "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" "$LATEST_FIRMWARE"; then
