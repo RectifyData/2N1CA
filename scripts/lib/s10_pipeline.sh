@@ -65,7 +65,9 @@ s10_require_vendor_abi() {
   local dev="$1" path="$S10_ROOT/out/target/$1/vendor-abi.env"
   [[ -s "$path" ]] || s10_die "E748: No verified S10 stock ABI manifest"
   local model="${TARGET_FIRMWARE%%/*}" other="${TARGET_FIRMWARE#*/}"
-  local region="${other%%/*}" vendor="$S10_ROOT/out/fw/${model}_${region}/vendor/build.prop"
+  local region vendor
+  region="${other%%/*}"
+  vendor="$S10_ROOT/out/fw/${model}_${region}/vendor/build.prop"
   [[ -s "$vendor" ]] || s10_die "E749: Missing extracted stock vendor/build.prop"
   local sha firmware_sha
   sha="$(sha256sum "$vendor" | cut -d ' ' -f1)"
@@ -85,7 +87,7 @@ s10_require_vendor_abi() {
 # The donor thermal policy must be taken from the exact extracted S25 FE
 # floating-feature.xml and Device Health Manager APK. No S22 fallback.
 s10_require_donor_thermal() {
-  local dev="$1" path="$S10_ROOT/out/target/$1/donor-thermal.env"
+  local path="$S10_ROOT/out/target/$1/donor-thermal.env"
   [[ -s "$path" ]] || s10_die "E754: Missing S25 FE thermal evidence"
   local model="${SOURCE_FIRMWARE%%/*}" rest="${SOURCE_FIRMWARE#*/}"
   local region="${rest%%/*}"
