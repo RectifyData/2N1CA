@@ -170,6 +170,7 @@ if $BUILD_ROM; then
             --source "$SRC_DIR" --device "$TARGET_CODENAME" \
             --work-dir "$WORK_DIR" \
             --stock-target "$FW_DIR/$TARGET_FIRMWARE_PATH" \
+            --vendor-abi "$OUT_DIR/target/$TARGET_CODENAME/vendor-abi.env" \
             --json-out "$OUT_DIR/target/$TARGET_CODENAME/framework-audit.json" || exit 1
         # Compare the actual Android 16 framework HAL contract with the
         # extracted Exynos9820 stock vendor and ODM. No synthetic PASS.
