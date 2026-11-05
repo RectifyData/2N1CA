@@ -20,9 +20,11 @@ class S10VintfTests(unittest.TestCase):
         self.root = Path(tmp.name)
         for name in ("system/system", "vendor", "product", "odm"):
             (self.root / name).mkdir(parents=True)
+        self.abi = self.root / "stock-vendor-abi.env"
+        self.abi.write_text('S10_VENDOR_FIRST_API="28"\n')
 
     def test_dirmap_targets_real_legacy_partitions(self):
-        args = mod.assemble(self.root, "checkvintf")
+        args = mod.assemble(self.root, "checkvintf", self.abi)
         self.assertIn("--check-compat", args)
         self.assertIn(f"/vendor:{(self.root / 'vendor').resolve()}", args)
         self.assertIn(f"/system:{(self.root / 'system/system').resolve()}", args)
@@ -32,17 +34,32 @@ class S10VintfTests(unittest.TestCase):
     def test_must_have_vendor_for_real_check(self):
         (self.root / "vendor").rmdir()
         with self.assertRaises(ValueError):
-            mod.assemble(self.root)
+            mod.assemble(self.root, vendor_abi=self.abi)
 
     def test_duplicate_product_paths_rejected(self):
         (self.root / "system/system/product").mkdir(parents=True)
         with self.assertRaises(ValueError):
             mod.assemble(self.root)
 
+    def test_missing_stock_abi_fails_before_vintf(self):
+        with self.assertRaises(ValueError):
+            mod.assemble(self.root)
+
+    def test_malformed_stock_first_api_fails(self):
+        self.abi.write_text('S10_VENDOR_FIRST_API="0"\n')
+        with self.assertRaises(ValueError):
+            mod.assemble(self.root, vendor_abi=self.abi)
+
+    def test_nondefault_source_first_api_is_not_hardcoded(self):
+        self.abi.write_text('S10_VENDOR_FIRST_API="29"\n')
+        args = mod.assemble(self.root, vendor_abi=self.abi)
+        self.assertIn("ro.product.first_api_level=29", args)
+
     def test_missing_checker_is_hard_failure_when_required(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--work-dir", str(self.root),
-             "--tool", "missing-s10-vintf-test-command", "--require-tool"],
+             "--tool", "missing-s10-vintf-test-command",
+             "--vendor-abi", str(self.abi), "--require-tool"],
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn("E760", result.stderr)
@@ -53,7 +70,7 @@ class S10VintfTests(unittest.TestCase):
         executable.chmod(0o755)
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--work-dir", str(self.root),
-             "--tool", str(executable), "--require-tool"],
+             "--tool", str(executable), "--vendor-abi", str(self.abi), "--require-tool"],
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn("E761", result.stderr)
@@ -65,7 +82,8 @@ class S10VintfTests(unittest.TestCase):
         report = self.root / "report.json"
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--work-dir", str(self.root),
-             "--tool", str(executable), "--require-tool", "--report", str(report)],
+             "--tool", str(executable), "--vendor-abi", str(self.abi),
+             "--require-tool", "--report", str(report)],
             capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"device_boot_verified": false', report.read_text())
