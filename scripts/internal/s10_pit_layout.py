@@ -18,7 +18,10 @@ from pathlib import Path
 MAGIC = 0x12349876
 HEADER = 28
 ENTRY = 132
-SECTOR_BYTES = 512
+# Samsung PIT partition block-count units depend on device type.
+# Heimdall: MMC (2) = 512 bytes, UFS (8) = 4096 bytes.
+# Using MMC units for UFS silently underestimates partition capacity 8x.
+DEVICE_BLOCK_BYTES = {2: 512, 8: 4096}
 REQUIRED = ("SYSTEM", "VENDOR", "PRODUCT", "ODM", "BOOT")
 LIMIT = 64 * 1024 * 1024
 
@@ -58,6 +61,7 @@ def parse_pit(data: bytes) -> dict[str, int]:
         # BinaryType, DeviceType, Id, Attributes, UpdateAttributes,
         # BlockSizeOrOffset, BlockCount, FileOffset, FileSize.
         values = struct.unpack_from("<9I", data, offset)
+        device_type = values[1]
         start, blocks = values[5], values[6]
         rawname = data[offset + 36:offset + 68]
         name = rawname.split(b"\0", 1)[0].decode("ascii", errors="strict").upper()
@@ -67,8 +71,12 @@ def parse_pit(data: bytes) -> dict[str, int]:
             raise LayoutError(f"Duplicate PIT partition {name}")
         if blocks == 0 or start + blocks > 2**32:
             raise LayoutError(f"Invalid PIT block range for {name}")
-        # S10 UFS PIT block counts are in 512-byte logical sectors.
-        partitions[name] = blocks * SECTOR_BYTES
+        if device_type not in DEVICE_BLOCK_BYTES:
+            if name in REQUIRED or name == "SUPER":
+                raise LayoutError(f"Unsupported PIT device type {device_type} for {name}")
+            # Ignore non-OS entries with proprietary encoding.
+            continue
+        partitions[name] = blocks * DEVICE_BLOCK_BYTES[device_type]
     return partitions
 
 
