@@ -10,6 +10,13 @@ MODE="${2:-}"
 [[ -z "$MODE" || "$MODE" == "--force" ]] || s10_die "Unknown argument: $MODE"
 s10_require_target "$DEVICE"
 s10_env "$DEVICE"
+# Validate the exact pinned B-series release using one shared parser; no
+# separate weaker regex may admit an Android 17 C-series release.
+if [[ -n "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
+  python3 "$ROOT/scripts/internal/validate_oneui_donor.py" \
+    --pinned-version "$S10_ONEUI_85_SOURCE_VERSION" ||
+    s10_die "E637: Invalid Android 16 One UI 8.5 source version"
+fi
 # Never fetch an Android 16 donor using inherited S22 credentials or a
 # made-up S25 FE identifier. The firmware ID is supplied as a CI secret.
 [[ "$SOURCE_FIRMWARE" == SM-S731B/* ]] ||

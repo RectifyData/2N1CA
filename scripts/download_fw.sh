@@ -118,8 +118,9 @@ for i in "${FIRMWARES[@]}"; do
     DONOR_PINNED=false
     if [[ "${TARGET_PLATFORM:-}" == "exynos9820" && "$MODEL" == "SM-S731B" &&
           -n "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
-        if [[ ! "$S10_ONEUI_85_SOURCE_VERSION" =~ ^S731B[A-Z0-9]+(/[A-Z0-9]+){2,3}$ ]]; then
-            LOGE "E637: Invalid S25 FE pinned firmware version format"
+        if ! python3 "$SRC_DIR/scripts/internal/validate_oneui_donor.py" \
+                --pinned-version "$S10_ONEUI_85_SOURCE_VERSION" >/dev/null; then
+            LOGE "E637: Invalid S25 FE pinned firmware version"
             exit 1
         fi
         LATEST_FIRMWARE="$S10_ONEUI_85_SOURCE_VERSION"

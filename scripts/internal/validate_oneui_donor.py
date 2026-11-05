@@ -31,10 +31,13 @@ def validate(props: dict[str, str]) -> None:
     if (major, minor) != (8, 5):
         raise DonorError(f"Expected One UI 8.5 (80500), got {raw!r}; do not sync to 9.0")
     model = props.get("ro.product.model", "")
-    if model and "S25" not in model and "SM-S731" not in model:
-        # Donor firmware model verification happens separately via directory name.
-        # Do not hard reject Samsung product labels that omit the marketed name.
-        pass
+    if model and not (
+        "S25 FE" in model.upper() or model.upper().startswith("SM-S731")
+    ):
+        raise DonorError(f"Donor model does not identify Galaxy S25 FE: {model!r}")
+    board = props.get("ro.board.platform", "") or props.get("ro.hardware", "")
+    if board and board.lower() != "s5e9945":
+        raise DonorError(f"Wrong donor SoC board {board!r}; expected S25 FE s5e9945")
 
 
 def validate_pinned_version(version: str) -> None:

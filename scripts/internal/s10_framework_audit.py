@@ -172,7 +172,7 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
     gpu_dir = work / "system/system/priv-app"
     if gpu_dir.is_dir():
         for app in gpu_dir.iterdir():
-            if re.fullmatch(r"(?:Dev)?GameDriver-EX[0-9]+", app.name) and (
+            if re.fullmatch(r"(?:Dev)?(?:Game|GPU)Driver-EX[0-9]+", app.name) and (
                 not app.name.endswith("-EX9820")
             ):
                 errors.append(f"E742: unrelated GPU driver retained from donor: {app.name}")
