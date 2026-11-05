@@ -38,11 +38,11 @@ class S10VintfTests(unittest.TestCase):
 
     def test_duplicate_product_paths_rejected(self):
         (self.root / "system/system/product").mkdir(parents=True)
-        with self.assertRaises(ValueError):
-            mod.assemble(self.root)
+        with self.assertRaisesRegex(ValueError, "Ambiguous /product layout"):
+            mod.assemble(self.root, vendor_abi=self.abi)
 
     def test_missing_stock_abi_fails_before_vintf(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "E765"):
             mod.assemble(self.root)
 
     def test_malformed_stock_first_api_fails(self):
