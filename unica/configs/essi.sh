@@ -83,6 +83,42 @@ if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
     # S25 FE VNDK compatibility baseline (not S10 target VNDK).
     SOURCE_BOARD_API_LEVEL=34
 
+    # Only accept policy identities extracted from matching S25 FE firmware.
+    S10_DONOR_THERMAL_FILE="${OUT_DIR:-}/target/${TARGET_CODENAME:-}/donor-thermal.env"
+    if [[ -s "$S10_DONOR_THERMAL_FILE" ]]; then
+        if grep -Eqv '^(#.*|S10_DONOR_(SSRM_POLICY|DVFS_POLICY)="[A-Za-z0-9_.-]+"|S10_DONOR_(FLOATING_FEATURE|HEALTH_APK)_SHA256="[a-f0-9]{64}"|)
+    # The values remain deliberately unconfigured until matching S25 FE
+    # firmware policies have been checked, never silently substituted.
+    SOURCE_DVFSAPP_CONFIG_SSRM_POLICY_FILENAME="${S10_DONOR_SSRM_POLICY:-UNVERIFIED_S25FE_SSRM}"
+    SOURCE_DVFSAPP_CONFIG_DVFS_POLICY_FILENAME="${S10_DONOR_DVFS_POLICY:-UNVERIFIED_S25FE_DVFS}"
+
+    SOURCE_AUDIO_SUPPORT_ACH_RINGTONE=false
+    SOURCE_CAMERA_SUPPORT_MASS_APP_FLAVOR=true
+    SOURCE_COMMON_CONFIG_MDNIE_MODE="37905"
+    SOURCE_COMMON_SUPPORT_DYN_RESOLUTION_CONTROL=false
+    SOURCE_FINGERPRINT_CONFIG_SENSOR="google_touch_display_optical,settings=3,aod_transition_animation"
+    SOURCE_LCD_CONFIG_COLOR_WEAKNESS_SOLUTION="0"
+    SOURCE_LCD_CONFIG_CONTROL_AUTO_BRIGHTNESS="5"
+    SOURCE_LCD_CONFIG_HFR_DEFAULT_REFRESH_RATE="120"
+    SOURCE_LCD_CONFIG_HFR_MODE="2"
+    SOURCE_LCD_CONFIG_HFR_SUPPORTED_REFRESH_RATE="60,120"
+    SOURCE_LCD_CONFIG_HFR_SUPPORTED_REFRESH_RATE_NS="60"
+    SOURCE_LCD_CONFIG_SEAMLESS_BRT="89,91"
+    SOURCE_LCD_CONFIG_SEAMLESS_LUX="260,2500"
+    SOURCE_LCD_SUPPORT_MDNIE_HW=false
+    SOURCE_WLAN_SUPPORT_MOBILEAP_DUALAP=true
+    SOURCE_WLAN_SUPPORT_MOBILEAP_6G=true
+    SOURCE_WLAN_SUPPORT_MOBILEAP_OWE=true
+    # Remaining SOURCE_* properties are inherited from the upstream baseline,
+    # and must be independently reconciled with extracted One UI 8.5 APKs.
+fi
+ "$S10_DONOR_THERMAL_FILE"; then
+            echo "E755: invalid S25 FE donor thermal evidence" >&2
+            return 1
+        fi
+        # shellcheck source=/dev/null
+        source "$S10_DONOR_THERMAL_FILE"
+    fi
     # Do not inherit Galaxy S22/Exynos2200 SSRM policy for the S25 FE donor.
     # The values remain deliberately unconfigured until matching S25 FE
     # firmware policies have been checked, never silently substituted.
