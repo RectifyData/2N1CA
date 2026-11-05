@@ -29,7 +29,7 @@ class BootEvidenceTests(unittest.TestCase):
         self.report = self.root / "device-test.json"
         self.report.write_text(json.dumps({
             "device": self.device, "boot_completed": True,
-            "hardware_verified": True, "synthetic_fixture": True,
+            "hardware_verified": True, "synthetic_fixture": False,
         }))
         self.manifest = self.root / "boot-approval.json"
         self.entry = {
@@ -49,6 +49,16 @@ class BootEvidenceTests(unittest.TestCase):
         result = boot.verify_boot(self.image, self.manifest, self.device, self.report)
         self.assertTrue(result["hash_matched"])
         self.assertFalse(result["on_device_boot_verified_by_this_tool"])
+
+    def test_synthetic_report_cannot_authorize_flashable_build(self):
+        self.report.write_text(json.dumps({
+            "device": self.device, "boot_completed": True,
+            "hardware_verified": True, "synthetic_fixture": True,
+        }))
+        self.entry["test_report_sha256"] = hashlib.sha256(self.report.read_bytes()).hexdigest()
+        self.write_manifest()
+        with self.assertRaisesRegex(boot.BootError, "E637"):
+            boot.load_evidence(self.manifest, self.device, self.report)
 
     def test_mutation_of_one_boot_byte_is_rejected(self):
         raw = bytearray(self.image.read_bytes())

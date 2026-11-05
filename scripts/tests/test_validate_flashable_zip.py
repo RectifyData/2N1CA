@@ -45,6 +45,7 @@ class InstallerZipTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.zip_path = Path(self.tmp.name) / "synthetic.zip"
+        self.layout = self.make_layout()
         self.boot_manifest = Path(self.tmp.name) / "approved-boot.json"
         self.boot_manifest.write_text(json.dumps({
             "target": "beyond2lte",
@@ -60,6 +61,8 @@ class InstallerZipTests(unittest.TestCase):
                 z.writestr(name, data)
         if boot_manifest == "default":
             boot_manifest = self.boot_manifest
+        if layout is None:
+            layout = self.layout
         return " ".join(validator.validate(
             self.zip_path, expected, deep=True, layout=layout,
             boot_manifest=boot_manifest
@@ -67,6 +70,15 @@ class InstallerZipTests(unittest.TestCase):
 
     def test_good_legacy_s10_zip(self):
         self.assertEqual(self.check(), "")
+
+    def test_missing_pit_manifest_rejected(self):
+        self.layout.unlink()
+        self.assertIn("E541", self.check())
+
+    def test_unapproved_edify_function_rejected(self):
+        malicious = INSTALLER + 'package_extract_dir("efs", "/efs");'
+        self.assertIn("E545", self.check(extras={
+            "META-INF/com/google/android/updater-script": malicious.encode()}))
 
     def test_missing_s10_boot_is_rejected(self):
         self.assertIn("E553", self.check(remove=["boot.img"]))

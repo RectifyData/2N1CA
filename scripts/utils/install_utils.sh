@@ -42,6 +42,33 @@ GET_DEVICE_FROM_MOUNTPOINT()
         exit 1
     fi
 
+    case "$TARGET_CODENAME" in
+        beyond0lte|beyond1lte|beyond2lte|beyondx)
+            # Only exact mount fields and the matching /dev/block partition
+            # basename may be used. Broad grep matching can redirect writes.
+            local expected="${MOUNTPOINT#/}"
+            case "$expected" in system|vendor|product|odm|boot) ;; *)
+                LOGE "E561: Disallowed S10 recovery partition: $MOUNTPOINT"
+                return 1 ;;
+            esac
+            local -a matched=()
+            mapfile -t matched < <(awk -v point="$MOUNTPOINT" \
+                '$1 !~ /^#/ && $2 == point { print $1 }' "$FSTAB_FILE")
+            if [[ "${#matched[@]}" -ne 1 ]]; then
+                LOGE "E562: Need exactly one recovery mapping for $MOUNTPOINT"
+                return 1
+            fi
+            if [[ "${matched[0]}" != /dev/block/* ||
+                  "${matched[0]##*/}" != "$expected" ||
+                  "${matched[0]}" =~ [[:space:]\;\$\`\(\)] ]]; then
+                LOGE "E563: Unsafe S10 block path for $MOUNTPOINT"
+                return 1
+            fi
+            printf '"%s"' "${matched[0]}"
+            return 0
+            ;;
+    esac
+
     if $TARGET_USE_DYNAMIC_PARTITIONS && IS_VALID_PARTITION_NAME "${MOUNTPOINT/\//}"; then
         echo -n "map_partition(\"${MOUNTPOINT/\//}\")"
     else

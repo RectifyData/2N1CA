@@ -266,6 +266,17 @@ case "$TARGET_CODENAME" in
             LOGE "E632: S10 flashable package requires an approved boot.img"
             exit 1
         }
+        # Direct invocations must not bypass the same approval and VINTF gate
+        # imposed by build.sh. Do not certify the package from a hash alone.
+        [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]] || {
+            LOGE "E560: S10 flashable builder requires strict VINTF mode"
+            exit 1
+        }
+        python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+            --target "$TARGET_CODENAME" \
+            --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+            --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+            --boot "$TMP_DIR/boot.img" || exit 1
         # Prevent the updater from looking up /dt, /dtbo, /vendor_boot or
         # /init_boot partitions that are not present in the verified S10 fstab.
         # The required S10 kernel packaging must be designed and verified separately.
@@ -310,7 +321,7 @@ for p in $PARTITIONS_LIST; do
 done
 
 LOG "- Generating updater-script"
-GENERATE_UPDATER_SCRIPT
+GENERATE_UPDATER_SCRIPT || exit 1
 
 LOG "- Generating build_info.txt"
 PRINT_BUILD_INFO "$BUILD_INFO" > "$TMP_DIR/build_info.txt" || exit 1
@@ -354,7 +365,8 @@ case "$TARGET_CODENAME" in
     beyond0lte|beyond1lte|beyond2lte|beyondx)
         if ! python3 "$SRC_DIR/scripts/internal/validate_flashable_zip.py" \
             "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" \
-            --layout "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" --deep; then
+            --layout "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" --deep \
+            --boot-manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json"; then
             LOGE "Produced ZIP failed S10 installer validation; refusing to publish"
             rm -f "$OUTPUT_FILE"
             exit 1

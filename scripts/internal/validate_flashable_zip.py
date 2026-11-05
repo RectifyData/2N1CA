@@ -172,6 +172,8 @@ def validate(path, expected=None, deep=False, layout=None, boot_manifest=None):
                 error("E514", "ZIP contains block payloads without a block updater")
 
             if device in S10:
+                if layout is None:
+                    error("E541", "S10 needs a stock PIT capacity manifest, never optional")
                 if "boot.img" not in files:
                     error("E553", "S10 flashable archive has no boot.img")
                 else:
@@ -248,12 +250,50 @@ def validate(path, expected=None, deep=False, layout=None, boot_manifest=None):
                 # Generated S10 full-OTAs only need block writes, boot extraction,
                 # assertions and progress UI. Reject arbitrary shell execution or
                 # extra partition modification commands in custom Edify snippets.
-                extra_ops = re.findall(
-                    r'\b(run_program|apply_patch|format|mount|unmount|delete|'
-                    r'delete_recursive|write_raw_image|set_metadata|set_perm)\s*\(',
-                    script)
+                # Allow only the functions emitted by this project's S10
+                # generator. An incomplete blacklist can miss arbitrary
+                # edify functions with write or shell side effects.
+                masked = re.sub(r'"(?:\\\\.|[^"\\\\])*"', '""', script)
+                masked = re.sub(r'(?m)^\\s*#.*
+                if "ro.product.device" not in script and "ro.boot.em.model" not in script:
+                    error("E524", "S10 installer has no device assertion")
+                for operation in ("mark_header_bt(", "write_data_bt(", "format(\"/data",
+                                  "format(\"/efs", "delete_recursive(\"/data"):
+                    if operation in script:
+                        error("E525", f"Unsafe S10 operation: {operation}")
+    except (OSError, ValueError, UnicodeError, EOFError, zipfile.BadZipFile) as ex:
+        error("E531", f"Could not validate ZIP: {ex}")
+    return problems
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("zip", type=Path)
+    p.add_argument("--expected-device")
+    p.add_argument("--deep", action="store_true")
+    p.add_argument("--layout", type=Path, help="PIT-generated partition size manifest")
+    p.add_argument("--boot-manifest", type=Path,
+                   help="Independent S10 boot approval (not an entry in the ZIP)")
+    args = p.parse_args()
+    problems = validate(args.zip, args.expected_device, args.deep, args.layout,
+                        args.boot_manifest)
+    for problem in problems:
+        print(f"2N1CA installer validation failed [{problem}]", file=sys.stderr)
+    if problems:
+        return 2
+    print(f"2N1CA installer validation passed: {args.zip}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+, '', masked)
+                called = set(re.findall(r'(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\\s*\\(', masked))
+                allowed = {"getprop", "abort", "ui_print", "show_progress",
+                           "set_progress", "package_extract_file", "block_image_update"}
+                extra_ops = sorted(called - allowed)
                 if extra_ops:
-                    error("E545", f"Unapproved S10 updater operation(s): {sorted(set(extra_ops))}")
+                    error("E545", f"Unapproved S10 updater function(s): {extra_ops}")
                 if "ro.product.device" not in script and "ro.boot.em.model" not in script:
                     error("E524", "S10 installer has no device assertion")
                 for operation in ("mark_header_bt(", "write_data_bt(", "format(\"/data",

@@ -61,6 +61,8 @@ def load_evidence(manifest: Path, target: str, test_report: Path) -> dict:
         raise BootError("E630: Device test report does not document boot completion")
     if report.get("hardware_verified") is not True:
         raise BootError("E631: Device hardware verification is not complete")
+    if report.get("synthetic_fixture") is True:
+        raise BootError("E637: Synthetic device report is not acceptable boot approval")
     # Report and SHA fields are supplied by the owner, not evidence that
     # hardware testing happened. They cannot be trusted automatically.
     return entry
