@@ -133,6 +133,17 @@ donor_prop="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
 python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_prop" \
   --vendor-build-prop "$FW_DIR/${donor_model}_${donor_region}/vendor/build.prop" ||
   s10_die "Donor is not Android 16 / One UI 8.5. Provide a pinned compatible firmware archive."
+# Confirm donor thermal policies against actual floating features and APK
+# assets; inherited S22 SSRM names are not permitted.
+python3 "$ROOT/scripts/internal/s10_donor_thermal.py" \
+  "$FW_DIR/${donor_model}_${donor_region}" \
+  --dvfs-policy "${S10_DONOR_DVFS_POLICY:-}" \
+  --output "$OUT_DIR/target/$DEVICE/donor-thermal.env" ||
+  s10_die "E754: S25 FE SSRM/DVFS identity not validated"
+s10_env "$DEVICE"
+s10_require_vendor_abi "$DEVICE"
+s10_require_donor_thermal "$DEVICE"
+
 s10_info "Auditing S10 vendor HAL/init/VINTF/partition layout"
 python3 "$ROOT/scripts/internal/s10_vendor_audit.py" \
   "$FW_DIR/${model}_${region}" \
