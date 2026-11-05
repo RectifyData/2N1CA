@@ -27,6 +27,11 @@ jobs:
             shellcheck -e SC1090,SC1091 -s bash "$script" || code=1
           done < <(find platform scripts target unica -name '*.sh' \
                         ! -name '*ssi.sh' ! -name 'config.sh' ! -name 'sff.sh' | sort)
+          # Configuration files are sourced by buildenv.sh; syntax-check them
+          # explicitly so broken target/platform configs cannot bypass CI.
+          while IFS= read -r config; do
+            bash -n "$config" || code=1
+          done < <(find platform target -type f -name 'config.sh' | sort)
           for script in prepare.sh download.sh build.sh verify.sh; do
             bash -n "$script" || code=1
             shellcheck -e SC1090,SC1091 -s bash "$script" || code=1
