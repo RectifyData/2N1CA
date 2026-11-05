@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reject a donor that isn't Android 16 / One UI 8.5."""
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -36,13 +37,36 @@ def validate(props: dict[str, str]) -> None:
         pass
 
 
+def validate_pinned_version(version: str) -> None:
+    """Require an S25 FE B-series Android 16 build, never a C-series One UI 9 build.
+
+    Samsung's S25 FE Android 16 / One UI 8.5 releases use B-series PDAs
+    (e.g. S731BXXU6BZDP); this is only a pre-download check. The extracted
+    ro.build.version.sdk and ro.build.version.oneui remain authoritative.
+    """
+    parts = version.split("/")
+    if len(parts) not in (3, 4) or any(
+        not re.fullmatch(r"[A-Z0-9]{8,24}", p) for p in parts
+    ):
+        raise DonorError("Pinned FUS build must have 3 or 4 slash-separated component versions")
+    pda = parts[0]
+    if not re.fullmatch(r"S731B[A-Z0-9]+B[A-Z0-9]{3}", pda):
+        raise DonorError(f"Pinned donor PDA {pda!r} is not S25 FE B-series Android 16")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("build_prop", type=Path)
+    parser.add_argument("build_prop", type=Path, nargs="?")
+    parser.add_argument("--pinned-version", help="Validate an explicit Samsung FUS Android 16 donor build")
     args = parser.parse_args()
     try:
-        props = read_properties(args.build_prop)
-        validate(props)
+        if args.pinned_version:
+            validate_pinned_version(args.pinned_version)
+        if args.build_prop:
+            props = read_properties(args.build_prop)
+            validate(props)
+        elif not args.pinned_version:
+            raise DonorError("Supply a build.prop file or --pinned-version")
     except (DonorError, OSError) as exc:
         print(f"2N1CA E630: One UI donor rejected: {exc}", file=sys.stderr)
         return 2
