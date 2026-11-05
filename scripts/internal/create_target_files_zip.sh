@@ -175,6 +175,21 @@ if [ -d "$WORK_DIR/kernel" ]; then
     done
 fi
 
+# Target-files-only output remains explicitly non-flashable. A flashable
+# image requires byte-for-byte validation of the boot.img actually packaged.
+if [[ "${TARGET_PLATFORM:-}" == "exynos9820" &&
+      "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+    [[ -s "$TMP_DIR/boot.img" ]] || {
+        LOGE "E632: S10 flashable build has no boot.img"
+        exit 1
+    }
+    python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+        --target "$TARGET_CODENAME" \
+        --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+        --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+        --boot "$TMP_DIR/boot.img" || exit 1
+fi
+
 LOG "- Generating build_info.txt"
 GENERATE_BUILD_INFO || exit 1
 

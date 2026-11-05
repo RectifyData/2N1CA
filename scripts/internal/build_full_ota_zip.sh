@@ -262,6 +262,10 @@ case "$TARGET_CODENAME" in
             LOGE "S10 legacy ZIP requested dynamic partitions; refusing to package"
             exit 1
         fi
+        [[ -s "$TMP_DIR/boot.img" ]] || {
+            LOGE "E632: S10 flashable package requires an approved boot.img"
+            exit 1
+        }
         # Prevent the updater from looking up /dt, /dtbo, /vendor_boot or
         # /init_boot partitions that are not present in the verified S10 fstab.
         # The required S10 kernel packaging must be designed and verified separately.

@@ -16,8 +16,13 @@ s10_require_target "$DEVICE"
 if [[ "$MODE" != "--target-files-only" ]]; then
   # Never run long downloads for a flashable candidate without provisioned VINTF.
   export S10_REQUIRE_VINTF=true
-  [[ -s "$ROOT/platform/exynos9820/kernel/boot-image-validated.sha256" ]] ||
-    s10_die "E620: No verified Exynos 9820 One UI 8 boot image. Flashable build blocked."
+  # An empty or arbitrary "verified" file must not enable flashing.
+  # Require provenance and a separately hashed device-test report.
+  python3 "$ROOT/scripts/internal/s10_boot_integrity.py" \
+    --target "$DEVICE" \
+    --manifest "$ROOT/platform/exynos9820/kernel/boot-image-validated.json" \
+    --test-report "$ROOT/out/target/$DEVICE/boot-test-report.json" ||
+    s10_die "E620: No approved S10 kernel provenance and test report; flashable build blocked."
 fi
 s10_info "Step 1/4: prepare"
 bash "$ROOT/prepare.sh" "$DEVICE" || s10_die "Preparation failed"
