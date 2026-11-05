@@ -62,7 +62,7 @@ s10_require_pit_layout() {
 
 # Bind loaded build properties to a specific extracted firmware version.
 s10_require_vendor_abi() {
-  local dev="$1" path="$S10_ROOT/out/target/$1/vendor-abi.env"
+  local path="$S10_ROOT/out/target/$1/vendor-abi.env"
   [[ -s "$path" ]] || s10_die "E748: No verified S10 stock ABI manifest"
   local model="${TARGET_FIRMWARE%%/*}" other="${TARGET_FIRMWARE#*/}"
   local region vendor
