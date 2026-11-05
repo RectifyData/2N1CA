@@ -37,8 +37,12 @@ jobs:
           test "$TARGET_USE_DYNAMIC_PARTITIONS" = "false"
           test "$TARGET_OS_FILE_SYSTEM_TYPE" = "ext4"
           test "$TARGET_OS_SINGLE_SYSTEM_IMAGE" = "essi"
-          test "$TARGET_PLATFORM_SDK_VERSION" = "31"
-          test "$TARGET_PRODUCT_SHIPPING_API_LEVEL" = "28"
+          # Source-only CI has no stock Samsung firmware. Explicit UNKNOWN
+          # values must not be mistaken for validated vendor ABI levels.
+          test "$TARGET_PLATFORM_SDK_VERSION" = "0"
+          test "$TARGET_VNDK_VERSION" = "0"
+          test "$TARGET_PRODUCT_SHIPPING_API_LEVEL" = "0"
+          test "$TARGET_BOARD_API_LEVEL" = "0"
           test "$TARGET_OS_BUILD_SYSTEM_EXT_PARTITION" = "false"
           test -s "out/config.sh"
           grep -q 'TARGET_NAME=' "out/config.sh"
