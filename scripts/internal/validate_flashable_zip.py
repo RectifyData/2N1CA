@@ -253,8 +253,20 @@ def validate(path, expected=None, deep=False, layout=None, boot_manifest=None):
                 # Allow only the functions emitted by this project's S10
                 # generator. An incomplete blacklist can miss arbitrary
                 # edify functions with write or shell side effects.
-                masked = re.sub(r'"(?:\\\\.|[^"\\\\])*"', '""', script)
-                masked = re.sub(r'(?m)^\\s*#.*
+                # Strip quoted text and Edify comments before scanning calls.
+                without_comments = "\n".join(
+                    line for line in script.splitlines()
+                    if not line.lstrip().startswith("#")
+                )
+                masked = re.sub(r'"(?:\\.|[^"\\])*"', '""', without_comments)
+                called = set(re.findall(
+                    r'(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)\s*\(', masked
+                ))
+                allowed = {"getprop", "abort", "ui_print", "show_progress",
+                           "set_progress", "package_extract_file", "block_image_update"}
+                extra_ops = sorted(called - allowed)
+                if extra_ops:
+                    error("E545", f"Unapproved S10 updater function(s): {extra_ops}")
                 if "ro.product.device" not in script and "ro.boot.em.model" not in script:
                     error("E524", "S10 installer has no device assertion")
                 for operation in ("mark_header_bt(", "write_data_bt(", "format(\"/data",
