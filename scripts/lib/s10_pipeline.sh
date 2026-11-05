@@ -59,3 +59,25 @@ s10_require_pit_layout() {
   done
   s10_info "PIT-derived capacities validated for $device; physical device still untested"
 }
+
+# Bind loaded build properties to a specific extracted firmware version.
+s10_require_vendor_abi() {
+  local dev="$1" path="$S10_ROOT/out/target/$1/vendor-abi.env"
+  [[ -s "$path" ]] || s10_die "E748: No verified S10 stock ABI manifest"
+  local model="${TARGET_FIRMWARE%%/*}" other="${TARGET_FIRMWARE#*/}"
+  local region="${other%%/*}" vendor="$S10_ROOT/out/fw/${model}_${region}/vendor/build.prop"
+  [[ -s "$vendor" ]] || s10_die "E749: Missing extracted stock vendor/build.prop"
+  local sha firmware_sha
+  sha="$(sha256sum "$vendor" | cut -d ' ' -f1)"
+  firmware_sha="$(printf '%s' "$TARGET_FIRMWARE:$S10_TARGET_FIRMWARE_VERSION" | sha256sum | cut -d ' ' -f1)"
+  grep -qxF "S10_VENDOR_BUILD_PROP_SHA256=\"$sha\"" "$path" ||
+    s10_die "E750: Vendor ABI evidence does not match extracted vendor bytes"
+  grep -qxF "S10_VENDOR_FIRMWARE_SHA256=\"$firmware_sha\"" "$path" ||
+    s10_die "E751: Vendor ABI evidence belongs to another firmware version"
+  local name value
+  for name in TARGET_PLATFORM_SDK_VERSION TARGET_PRODUCT_SHIPPING_API_LEVEL TARGET_BOARD_API_LEVEL TARGET_VNDK_VERSION; do
+    value="${!name:-0}"
+    [[ "$value" =~ ^[0-9]+$ && "$value" -ge 28 && "$value" -le 36 ]] ||
+      s10_die "E752: Missing or invalid stock vendor ABI value for $name: $value"
+  done
+}
