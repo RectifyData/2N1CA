@@ -158,7 +158,10 @@ GENERATE_UPDATER_SCRIPT()
                 echo    'show_progress(0.100000, 0);'
             fi
             echo -n "block_image_update("
-            GET_DEVICE_FROM_MOUNTPOINT "/$p"
+            GET_DEVICE_FROM_MOUNTPOINT "/$p" || {
+                printf 'E546: Cannot resolve partition %s in recovery fstab\n' "$p" >&2
+                exit 1
+            }
             echo -n ', package_extract_file("'
             echo -n "$p.transfer.list"
             echo -n '"), "'
@@ -182,14 +185,20 @@ GENERATE_UPDATER_SCRIPT()
                 echo -n 'package_extract_file("'
                 echo -n "$b.img"
                 echo -n '", '
-                GET_DEVICE_FROM_MOUNTPOINT "/$b"
+                GET_DEVICE_FROM_MOUNTPOINT "/$b" || {
+                    printf 'E547: Unsupported recovery kernel mount %s\n' "$b" >&2
+                    exit 1
+                }
                 echo    ') || abort("E4002: Failed to write kernel image.");'
             fi
         done
         if [ -f "$TMP_DIR/boot.img" ]; then
             echo    'ui_print("Installing boot image...");'
             echo -n 'package_extract_file("boot.img", '
-            GET_DEVICE_FROM_MOUNTPOINT "/boot"
+            GET_DEVICE_FROM_MOUNTPOINT "/boot" || {
+                printf 'E548: Recovery fstab lacks a valid boot partition\n' >&2
+                exit 1
+            }
             echo    ') || abort("E4003: Failed to write boot image.");'
         fi
 
