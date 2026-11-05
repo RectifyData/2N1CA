@@ -115,6 +115,15 @@ if [[ ! -s "$FW_DIR/${model}_${region}/.extracted" ]] ||
    [[ "$(cat "$FW_DIR/${model}_${region}/.extracted")" != "$S10_TARGET_FIRMWARE_VERSION" ]]; then
   s10_die "E642: Extracted target firmware differs from pinned S10 stock version"
 fi
+# Derive ABI properties from the matching extracted stock vendor (not
+# fixed Android 12 guesses). All fields must be present and consistent.
+python3 "$ROOT/scripts/internal/s10_vendor_abi.py" \
+  "$FW_DIR/${model}_${region}" --firmware-hash "$firmware_hash" \
+  --output "$OUT_DIR/target/$DEVICE/vendor-abi.env" ||
+  s10_die "E746: Stock S10 vendor ABI evidence missing or inconsistent"
+s10_env "$DEVICE"
+s10_require_vendor_abi "$DEVICE"
+
 # The upstream firmware downloader normally selects the newest FUS release.
 # Verify the actual extracted firmware, never assume it remained One UI 8.5.
 donor_model="${SOURCE_FIRMWARE%%/*}"
