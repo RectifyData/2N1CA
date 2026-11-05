@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Synthetic installer tests. Nothing is flashed."""
+import hashlib
 import importlib.util
+import json
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -16,7 +19,15 @@ INSTALLER = (
     'block_image_update("/dev/block/by-name/system", '
     'package_extract_file("system.transfer.list"), '
     '"system.new.dat", "system.patch.dat") || abort("Write failed");\n'
+    'package_extract_file("boot.img", "/dev/block/by-name/boot") || abort("Boot failed");\n'
 )
+
+# Synthetics have valid Android header syntax, NOT a real working kernel.
+BOOT_HEADER = bytearray(4096)
+BOOT_HEADER[:8] = b"ANDROID!"
+struct.pack_into("<I", BOOT_HEADER, 8, 1024)
+struct.pack_into("<I", BOOT_HEADER, 40, 1)
+SYNTHETIC_BOOT = bytes(BOOT_HEADER) + b"K" * 4096
 VALID = {
     "build_info.txt": b"device=beyond2lte\nversion=2N1CA-test\n",
     "META-INF/com/android/metadata": b"pre-device=beyond2lte\nota-type=BLOCK\n",
@@ -25,6 +36,7 @@ VALID = {
     "system.transfer.list": b"4\n0\n0\n0\n",
     "system.new.dat": b"synthetic-payload",
     "system.patch.dat": b"",
+    "boot.img": SYNTHETIC_BOOT,
 }
 
 
@@ -33,17 +45,53 @@ class InstallerZipTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.zip_path = Path(self.tmp.name) / "synthetic.zip"
+        self.boot_manifest = Path(self.tmp.name) / "approved-boot.json"
+        self.boot_manifest.write_text(json.dumps({
+            "target": "beyond2lte",
+            "boot_sha256": hashlib.sha256(SYNTHETIC_BOOT).hexdigest(),
+        }))
 
-    def check(self, remove=(), extras=None, expected="beyond2lte", layout=None):
+    def check(self, remove=(), extras=None, expected="beyond2lte",
+              layout=None, boot_manifest="default"):
         entries = {k: v for k, v in VALID.items() if k not in remove}
         entries.update(extras or {})
         with zipfile.ZipFile(self.zip_path, "w") as z:
             for name, data in entries.items():
                 z.writestr(name, data)
-        return " ".join(validator.validate(self.zip_path, expected, deep=True, layout=layout))
+        if boot_manifest == "default":
+            boot_manifest = self.boot_manifest
+        return " ".join(validator.validate(
+            self.zip_path, expected, deep=True, layout=layout,
+            boot_manifest=boot_manifest
+        ))
 
     def test_good_legacy_s10_zip(self):
         self.assertEqual(self.check(), "")
+
+    def test_missing_s10_boot_is_rejected(self):
+        self.assertIn("E553", self.check(remove=["boot.img"]))
+
+    def test_changed_boot_byte_is_rejected(self):
+        damaged = bytearray(SYNTHETIC_BOOT)
+        damaged[-1] ^= 1
+        self.assertIn("E556", self.check(extras={"boot.img": bytes(damaged)}))
+
+    def test_invalid_boot_magic_is_rejected(self):
+        damaged = bytearray(SYNTHETIC_BOOT)
+        damaged[:8] = b"INVALID!"
+        self.assertIn("E554", self.check(extras={"boot.img": bytes(damaged)}))
+
+    def test_boot_write_must_not_be_omitted(self):
+        changed = INSTALLER.replace(
+            'package_extract_file("boot.img", "/dev/block/by-name/boot")',
+            'ui_print("boot skipped")'
+        )
+        self.assertIn("E557", self.check(extras={
+            "META-INF/com/google/android/updater-script": changed.encode()
+        }))
+
+    def test_missing_boot_approval_is_rejected(self):
+        self.assertIn("E555", self.check(boot_manifest=None))
 
     def test_wrong_device_rejected(self):
         self.assertIn("E505", self.check(expected="beyond0lte"))
