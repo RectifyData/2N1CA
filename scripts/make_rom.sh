@@ -185,6 +185,10 @@ if $BUILD_ROM; then
             "${S10_VINTF_ARGS[@]}" || exit 1
         python3 "$SRC_DIR/scripts/internal/s10_init_audit.py" "$WORK_DIR" \
             --report "$OUT_DIR/target/$TARGET_CODENAME/init-audit.json" || exit 1
+        python3 "$SRC_DIR/scripts/internal/s10_security_audit.py" \
+            --stock "$FW_DIR/$TARGET_FIRMWARE_PATH" \
+            --work "$WORK_DIR" \
+            --report "$OUT_DIR/target/$TARGET_CODENAME/security-audit.json" || exit 1
         LOG_STEP_OUT
     fi
 
