@@ -199,3 +199,48 @@ mismatched bootloader model is never ignored.
 compatibility verification, complete Exynos 9820 hardware service adaptations,
 VTS and SELinux validation, flash-safe kernel/ramdisk evidence, and a physical
 boot. The ROM remains source-stage experimental.
+
+## November 5 — independently reviewable fixes (source only)
+
+The S10 donor validator now **requires the extracted S25 FE vendor/build.prop** and its
+`ro.board.platform` property. Missing board identity, conflicting system/vendor
+board names, or an unexpected board are hard failures. The expected
+`s5e9945` contract is **not yet confirmed from a real donor dump**; it must
+be verified using an authentic firmware extraction. Unit tests contain
+only synthetic examples and cannot establish the actual SoC property.
+
+The four target configs no longer certify Android 12 SDK 31, launch API
+28, or VNDK 31 at source level. `s10_vendor_abi.py` derives SDK, VNDK,
+launch API and board API from the actual extracted stock S10 properties.
+If any value is absent, conflicting, or unsupported, the build remains
+blocked. The resulting `vendor-abi.env` is keyed to both the private
+firmware version and the SHA256 of extracted vendor/build.prop.
+Source-only CI expects **zero (unknown)**, not a fabricated successful
+hardware-compatibility check. Framework verification compares the
+repackaged vendor with this manifest; actual VINTF compatibility must
+still be checked using Android 16's host `checkvintf`.
+
+`scripts/install_s10_checkvintf.sh` installs a **user-provided,
+SHA256-pinned Android 16 ELF64 host binary** after validating the real
+CLI flags. Source: Android 16 AOSP `system/libvintf`, built with
+`m checkvintf` in a matching full AOSP build environment. It supports
+`S10_CHECKVINTF_SOURCE` (local path) or `S10_CHECKVINTF_URL` (HTTPS
+binary) and **requires** `S10_CHECKVINTF_SHA256`. GitHub Actions takes
+the URL and digest from separate repository secrets. **No confirmed
+Android 16 host binary or trusted digest has been supplied to this
+repo**, so the tool is not installed automatically and the flashable
+build remains blocked. A random third-party prebuilt is not acceptable
+without a matching verified hash and provenance.
+
+For S25 FE donor thermals, the S10 configuration no longer silently
+inherits `siop_r0s_exynos2200`. Instead, the matching extracted donor's
+`floating_feature.xml` and Samsung Device Health Manager APK must
+agree on the SSRM policy; its DVFS policy must also exist as an APK
+asset. `s10_donor_thermal.py` writes a SHA256-bound manifest. The build
+rejects missing or stale assets. If several DVFS variants exist, the
+maintainer must supply the correct `S10_DONOR_DVFS_POLICY` after
+checking the extracted APK, rather than guessing.
+
+None of these static fixes proves that HALs, fingerprint, Keymaster/TEE,
+NFC secure element, Android 16 framework services, SELinux, kernel or
+recovery work on the Galaxy S10. **No flashable ROM has been validated.**
