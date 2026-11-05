@@ -47,6 +47,23 @@ def read_pit_from_source(path: Path) -> tuple[bytes, str]:
         return content.read(), entry.name
 
 
+def read_pit_from_sources(sources: list[Path]) -> tuple[bytes, str]:
+    """Cross-check CSC and BL PITs if both exist; refuse conflicting layouts."""
+    found: list[tuple[bytes, str]] = []
+    for path in sources:
+        try:
+            found.append(read_pit_from_source(path))
+        except LayoutError as exc:
+            if "Expected exactly one PIT" not in str(exc):
+                raise
+    if not found:
+        raise LayoutError("No PIT found in supplied stock CSC or BL archives")
+    digests = {hashlib.sha256(data).digest() for data, _ in found}
+    if len(digests) != 1:
+        raise LayoutError("Conflicting PIT files between CSC and BL; refusing sizes")
+    return found[0]
+
+
 def parse_pit(data: bytes) -> dict[str, int]:
     if len(data) < HEADER:
         raise LayoutError("Truncated PIT header")
@@ -113,12 +130,12 @@ def make_env(layout: dict[str, int], data: bytes, name: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help=".pit file or Samsung CSC tar.md5")
+    parser.add_argument("sources", type=Path, nargs="+", help="Stock Samsung PIT, CSC or BL tar.md5 archives")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--firmware-id", help="Private target firmware ID; only its SHA256 is stored")
     args = parser.parse_args()
     try:
-        data, name = read_pit_from_source(args.source)
+        data, name = read_pit_from_sources(args.sources)
         layout = validate_s10_layout(parse_pit(data))
         content = make_env(layout, data, name)
         if args.firmware_id:

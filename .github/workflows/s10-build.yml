@@ -54,6 +54,7 @@ jobs:
       S10_ONEUI_85_SOURCE_FIRMWARE: ${{ secrets.S10_SOURCE_FIRMWARE }}
       S10_ONEUI_85_SOURCE_VERSION: ${{ secrets.S10_SOURCE_VERSION }}
       S10_TARGET_FIRMWARE: ${{ secrets.S10_TARGET_FIRMWARE }}
+      S10_TARGET_FIRMWARE_VERSION: ${{ secrets.S10_TARGET_FIRMWARE_VERSION }}
     steps:
       - uses: actions/checkout@v4
         with:

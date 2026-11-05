@@ -46,7 +46,7 @@ s10_require_pit_layout() {
   local device="$1" layout="$S10_ROOT/out/target/$1/pit-layout.env"
   local firmware_hash value key
   [[ -s "$layout" ]] || s10_die "Missing stock PIT layout for $device; run ./download.sh $device"
-  firmware_hash="$(printf '%s' "$TARGET_FIRMWARE" | sha256sum | cut -d ' ' -f 1)"
+  firmware_hash="$(printf '%s' "$TARGET_FIRMWARE:$S10_TARGET_FIRMWARE_VERSION" | sha256sum | cut -d ' ' -f 1)"
   grep -qxF "S10_TARGET_FIRMWARE_SHA256=\"$firmware_hash\"" "$layout" ||
     s10_die "PIT layout does not match current target firmware; redownload"
   grep -Eq '^S10_SOURCE_PIT_SHA256="[0-9a-f]{64}"$' "$layout" ||

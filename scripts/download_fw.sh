@@ -116,6 +116,7 @@ for i in "${FIRMWARES[@]}"; do
     # Only the S10/One UI 8.5 port may pin an older source donor.
     # Samsung's latest S25 FE FUS update may now be One UI 9 / Android 17.
     DONOR_PINNED=false
+    TARGET_PINNED=false
     if [[ "${TARGET_PLATFORM:-}" == "exynos9820" && "$MODEL" == "SM-S731B" &&
           -n "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
         if ! python3 "$SRC_DIR/scripts/internal/validate_oneui_donor.py" \
@@ -125,6 +126,10 @@ for i in "${FIRMWARES[@]}"; do
         fi
         LATEST_FIRMWARE="$S10_ONEUI_85_SOURCE_VERSION"
         DONOR_PINNED=true
+    elif [[ "${TARGET_PLATFORM:-}" == "exynos9820" &&
+            "$MODEL" == SM-G97* && -n "${S10_TARGET_FIRMWARE_VERSION:-}" ]]; then
+        LATEST_FIRMWARE="$S10_TARGET_FIRMWARE_VERSION"
+        TARGET_PINNED=true
     else
         LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
     fi
@@ -140,7 +145,7 @@ for i in "${FIRMWARES[@]}"; do
 
     LOG_STEP_IN
 
-    if $DONOR_PINNED && ! $FORCE; then
+    if { $DONOR_PINNED || $TARGET_PINNED; } && ! $FORCE; then
         # Never treat a newer Android release as a valid substitute for
         # the pinned Android 16 One UI 8.5 donor.
         if [[ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]] &&
@@ -159,7 +164,7 @@ for i in "${FIRMWARES[@]}"; do
         fi
     fi
 
-    if ! $FORCE && ! $DONOR_PINNED; then
+    if ! $FORCE && ! $DONOR_PINNED && ! $TARGET_PINNED; then
         # Skip if firmware has been extracted and equal/newer than the one in FUS
         if [ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]; then
             if COMPARE_SEC_BUILD_VERSION "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" "$LATEST_FIRMWARE"; then
@@ -188,7 +193,7 @@ for i in "${FIRMWARES[@]}"; do
     (
     cd "$OUT_DIR" || exit 1
     PINNED_DOWNLOAD_ARGS=()
-    if $DONOR_PINNED; then PINNED_DOWNLOAD_ARGS=(-v "$LATEST_FIRMWARE"); fi
+    if $DONOR_PINNED || $TARGET_PINNED; then PINNED_DOWNLOAD_ARGS=(-v "$LATEST_FIRMWARE"); fi
     samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" \
         download "${PINNED_DOWNLOAD_ARGS[@]}" -O "$ODIN_DIR/${MODEL}_${CSC}" 1> /dev/null || exit 1
     )

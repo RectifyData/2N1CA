@@ -38,6 +38,13 @@ target_model="${TARGET_FIRMWARE%%/*}"
   s10_die "E635: Malformed target firmware identifier"
 [[ "$TARGET_FIRMWARE" != */UNCONFIGURED ]] ||
   s10_die "E636: Stock firmware identifier is not configured"
+# The model/CSC/credential triplet is not a firmware version.
+# Require the PDA/CSC/CP version to make stock extracts and PIT reproducible.
+[[ -n "${S10_TARGET_FIRMWARE_VERSION:-}" ]] ||
+  s10_die "E640: S10_TARGET_FIRMWARE_VERSION is required to pin the stock firmware"
+model_version="${target_model#SM-}"
+[[ "$S10_TARGET_FIRMWARE_VERSION" =~ ^${model_version}[A-Z0-9]+(/[A-Z0-9]+){2,3}$ ]] ||
+  s10_die "E641: Target stock version is malformed or belongs to a different model"
 donor_model="${SOURCE_FIRMWARE%%/*}"
 donor_remaining="${SOURCE_FIRMWARE#*/}"
 donor_region="${donor_remaining%%/*}"
@@ -79,15 +86,15 @@ rest="${TARGET_FIRMWARE#*/}"
 region="${rest%%/*}"
 stock_dir="$ODIN_DIR/${model}_${region}"
 layout="$OUT_DIR/target/$DEVICE/pit-layout.env"
-firmware_hash="$(printf '%s' "$TARGET_FIRMWARE" | sha256sum | cut -d ' ' -f 1)"
+firmware_hash="$(printf '%s' "$TARGET_FIRMWARE:$S10_TARGET_FIRMWARE_VERSION" | sha256sum | cut -d ' ' -f 1)"
 shopt -s nullglob
-csc_tars=("$stock_dir"/CSC_*.tar.md5 "$stock_dir"/CSC_*.tar "$stock_dir"/HOME_CSC_*.tar.md5)
+csc_tars=("$stock_dir"/CSC_*.tar.md5 "$stock_dir"/CSC_*.tar "$stock_dir"/HOME_CSC_*.tar.md5 "$stock_dir"/BL_*.tar.md5 "$stock_dir"/BL_*.tar)
 shopt -u nullglob
 if [ "${#csc_tars[@]}" -gt 0 ]; then
-  s10_info "Extracting partition sizes from Samsung CSC PIT (no repartitioning)"
-  python3 "$ROOT/scripts/internal/s10_pit_layout.py" "${csc_tars[0]}" \
-    --firmware-id "$TARGET_FIRMWARE" --output "$layout" ||
-    s10_die "Stock PIT is missing/invalid; cannot safely derive partition capacities"
+  s10_info "Reading PIT from matching Samsung CSC/BL archives (no repartitioning)"
+  python3 "$ROOT/scripts/internal/s10_pit_layout.py" "${csc_tars[@]}" \
+    --firmware-id "$TARGET_FIRMWARE:$S10_TARGET_FIRMWARE_VERSION" --output "$layout" ||
+    s10_die "Stock PIT is missing/ambiguous; cannot derive safe partition capacities"
 elif [ -s "$layout" ] && grep -qx "S10_TARGET_FIRMWARE_SHA256=\"$firmware_hash\"" "$layout"; then
   s10_info "Using previously verified PIT capacity manifest for unchanged firmware"
 else
@@ -102,6 +109,9 @@ if ! $S10_DONOR_CACHED; then
 fi
 "$ROOT/scripts/extract_fw.sh" "${extract_options[@]}" ||
   s10_die "Firmware extraction failed; check storage, tar integrity and mount permissions"
+[[ -s "$FW_DIR/${model}_${region}/.extracted" ]] &&
+  [[ "$(cat "$FW_DIR/${model}_${region}/.extracted")" == "$S10_TARGET_FIRMWARE_VERSION" ]] ||
+  s10_die "E642: Extracted target firmware differs from pinned S10 stock version"
 # The upstream firmware downloader normally selects the newest FUS release.
 # Verify the actual extracted firmware, never assume it remained One UI 8.5.
 donor_model="${SOURCE_FIRMWARE%%/*}"
