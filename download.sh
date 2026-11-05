@@ -109,9 +109,10 @@ if ! $S10_DONOR_CACHED; then
 fi
 "$ROOT/scripts/extract_fw.sh" "${extract_options[@]}" ||
   s10_die "Firmware extraction failed; check storage, tar integrity and mount permissions"
-[[ -s "$FW_DIR/${model}_${region}/.extracted" ]] &&
-  [[ "$(cat "$FW_DIR/${model}_${region}/.extracted")" == "$S10_TARGET_FIRMWARE_VERSION" ]] ||
+if [[ ! -s "$FW_DIR/${model}_${region}/.extracted" ]] ||
+   [[ "$(cat "$FW_DIR/${model}_${region}/.extracted")" != "$S10_TARGET_FIRMWARE_VERSION" ]]; then
   s10_die "E642: Extracted target firmware differs from pinned S10 stock version"
+fi
 # The upstream firmware downloader normally selects the newest FUS release.
 # Verify the actual extracted firmware, never assume it remained One UI 8.5.
 donor_model="${SOURCE_FIRMWARE%%/*}"
