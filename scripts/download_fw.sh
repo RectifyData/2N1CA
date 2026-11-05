@@ -113,7 +113,20 @@ PREPARE_SCRIPT "$@"
 for i in "${FIRMWARES[@]}"; do
     PARSE_FIRMWARE_STRING "$i" || exit 1
 
-    LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
+    # Only the S10/One UI 8.5 port may pin an older source donor.
+    # Samsung's latest S25 FE FUS update may now be One UI 9 / Android 17.
+    DONOR_PINNED=false
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" && "$MODEL" == "SM-S731B" &&
+          -n "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
+        if [[ ! "$S10_ONEUI_85_SOURCE_VERSION" =~ ^S731B[A-Z0-9]+(/[A-Z0-9]+){2,3}$ ]]; then
+            LOGE "E637: Invalid S25 FE pinned firmware version format"
+            exit 1
+        fi
+        LATEST_FIRMWARE="$S10_ONEUI_85_SOURCE_VERSION"
+        DONOR_PINNED=true
+    else
+        LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
+    fi
     if [ ! "$LATEST_FIRMWARE" ]; then
         LOGE "Latest available firmware could not be fetched"
         exit 1
@@ -154,7 +167,10 @@ for i in "${FIRMWARES[@]}"; do
     # Anan's samloader stores its logs in the current working directory, let's move into OUT_DIR just for this time
     (
     cd "$OUT_DIR" || exit 1
-    samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" download -O "$ODIN_DIR/${MODEL}_${CSC}" 1> /dev/null || exit 1
+    PINNED_DOWNLOAD_ARGS=()
+    if $DONOR_PINNED; then PINNED_DOWNLOAD_ARGS=(-v "$LATEST_FIRMWARE"); fi
+    samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" \
+        download "${PINNED_DOWNLOAD_ARGS[@]}" -O "$ODIN_DIR/${MODEL}_${CSC}" 1> /dev/null || exit 1
     )
 
     ZIP_FILE="$(find "$ODIN_DIR/${MODEL}_${CSC}" -name "*.zip" | sort -r | head -n 1)"
