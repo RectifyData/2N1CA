@@ -14,6 +14,8 @@ s10_require_target "$DEVICE"
 # STOP before packaging if the required Android 16-compatible kernel port is absent.
 # A working stock Android 12 kernel cannot be assumed compatible with One UI 8.
 if [[ "$MODE" != "--target-files-only" ]]; then
+  # Never run long downloads for a flashable candidate without provisioned VINTF.
+  export S10_REQUIRE_VINTF=true
   [[ -s "$ROOT/platform/exynos9820/kernel/boot-image-validated.sha256" ]] ||
     s10_die "E620: No verified Exynos 9820 One UI 8 boot image. Flashable build blocked."
 fi
