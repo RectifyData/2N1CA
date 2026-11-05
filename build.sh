@@ -23,6 +23,7 @@ s10_info "Step 2/4: download and extract firmware"
 bash "$ROOT/download.sh" "$DEVICE" || s10_die "Firmware acquisition failed"
 s10_env "$DEVICE"
 s10_require_pit_layout "$DEVICE"
+s10_require_vendor_abi "$DEVICE"
 s10_info "Step 3/4: rebuild ROM and flashable ZIP"
 # Force work directory regeneration so updated donor firmware cannot reuse stale files.
 if [[ "$MODE" == "--target-files-only" ]]; then
