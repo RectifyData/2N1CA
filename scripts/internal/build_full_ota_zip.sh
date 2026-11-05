@@ -67,22 +67,30 @@ GENERATE_OTA_METADATA()
     local PROTO_FILE="$SRC_DIR/external/android-tools/vendor/build/tools/releasetools/ota_metadata.proto"
 
     local DEVICE
-    local RELEASE
+    local SDK_LEVEL
     local INCREMENTAL
     local TIMESTAMP
     local SECURITY_PATCH_LEVEL
     local FINGERPRINT
 
     DEVICE="$(grep "^device" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
-    RELEASE="$(grep "^os_version" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    SDK_LEVEL="$(grep "^sdk_level" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     INCREMENTAL="$(grep "^build_incremental" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     TIMESTAMP="$(grep "^build_date" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
     SECURITY_PATCH_LEVEL="$(grep "^security_patch" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
-    FINGERPRINT="$(grep "^source_fingerprint" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    FINGERPRINT="$(grep "^target_fingerprint" <<< "$BUILD_INFO" | cut -d "=" -f 2 -s)"
+    if [[ ! "$SDK_LEVEL" =~ ^[0-9]+$ || -z "$FINGERPRINT" ]]; then
+        LOGE "E551: Invalid final SDK level or missing post-build fingerprint"
+        return 1
+    fi
 
     mkdir -p "$TMP_DIR/META-INF/com/android"
 
     # https://android.googlesource.com/platform/build/+/refs/tags/android-15.0.0_r1/tools/releasetools/ota_utils.py#259
+    if [[ "$TARGET_CODENAME" == beyond* && ! -f "$PROTO_FILE" ]]; then
+        LOGE "E552: OTA metadata protobuf schema absent from host tools"
+        return 1
+    fi
     if [ -f "$PROTO_FILE" ]; then
         local MESSAGE
 
@@ -92,7 +100,7 @@ GENERATE_OTA_METADATA()
         MESSAGE+=", build: \\\"$FINGERPRINT\\\""
         MESSAGE+=", build_incremental: \\\"$INCREMENTAL\\\""
         MESSAGE+=", timestamp: $TIMESTAMP"
-        MESSAGE+=", sdk_level: \\\"$RELEASE\\\""
+        MESSAGE+=", sdk_level: \\\"$SDK_LEVEL\\\""
         MESSAGE+=", security_patch_level: \\\"$SECURITY_PATCH_LEVEL\\\"}"
 
         EVAL "protoc --encode=build.tools.releasetools.OtaMetadata --proto_path=\"$(dirname "$PROTO_FILE")\" \"$PROTO_FILE\" <<< \"$MESSAGE\" > \"$TMP_DIR/META-INF/com/android/metadata.pb\"" || exit 1
@@ -104,7 +112,7 @@ GENERATE_OTA_METADATA()
         echo "ota-type=BLOCK"
         echo "post-build=$FINGERPRINT"
         echo "post-build-incremental=$INCREMENTAL"
-        echo "post-sdk-level=$RELEASE"
+        echo "post-sdk-level=$SDK_LEVEL"
         echo "post-security-patch-level=$SECURITY_PATCH_LEVEL"
         echo "post-timestamp=$TIMESTAMP"
         echo "pre-device=$DEVICE"
@@ -304,7 +312,7 @@ LOG "- Generating build_info.txt"
 PRINT_BUILD_INFO "$BUILD_INFO" > "$TMP_DIR/build_info.txt" || exit 1
 
 LOG "- Generating OTA metadata"
-GENERATE_OTA_METADATA
+GENERATE_OTA_METADATA || exit 1
 
 if [ -d "$SRC_DIR/target/$TARGET_CODENAME/installer/root" ]; then
     LOG "- Copying target custom install files"
