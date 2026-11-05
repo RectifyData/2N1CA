@@ -64,8 +64,10 @@ def static_audit(source: Path, device: str) -> list[str]:
     errors: list[str] = []
     profile = TARGETS[device]
     shared = source / "platform/exynos9820/config.sh"
-    if not shared.is_file() or assignment(shared.read_text(), "TARGET_VNDK_VERSION") != "31":
-        errors.append("E713: Exynos9820 must use stock Android 12 VNDK version 31")
+    # Source-only CI cannot prove a vendor VNDK version. The actual value
+    # is loaded from the stock firmware manifest during a build.
+    if not shared.is_file() or 'TARGET_VNDK_VERSION="${S10_VENDOR_VNDK:-0}"' not in shared.read_text():
+        errors.append("E713: Exynos9820 VNDK must be loaded from stock vendor ABI")
     directory = source / "target" / device
     config = directory / "config.sh"
     feature = directory / "sff.sh"
@@ -108,7 +110,8 @@ def static_audit(source: Path, device: str) -> list[str]:
     return errors
 
 
-def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> list[str]:
+def workdir_audit(work: Path, device: str, stock_target: Path | None = None,
+                  vendor_abi: Path | None = None) -> list[str]:
     errors: list[str] = []
     sysprop = properties(work / "system/system/build.prop")
     vendor = properties(work / "vendor/build.prop")
@@ -140,11 +143,18 @@ def workdir_audit(work: Path, device: str, stock_target: Path | None = None) -> 
     ) != (8, 5):
         errors.append(f"E731: expected One UI 8.5 framework, found {ui_version!r}")
     vendor_sdk = vendor.get("ro.build.version.sdk", "")
-    if vendor_sdk and vendor_sdk != "31":
-        errors.append(f"E732: unexpected stock Exynos9820 vendor SDK {vendor_sdk}")
     vendor_vndk = vendor.get("ro.vndk.version", "")
-    if vendor_vndk and vendor_vndk != "31":
-        errors.append(f"E733: S10 stock vendor requires VNDK 31, found {vendor_vndk}")
+    if vendor_abi is None or not vendor_abi.is_file():
+        errors.append("E732: missing stock-derived vendor SDK/VNDK ABI manifest")
+    else:
+        evidence = properties(vendor_abi)
+        expected_sdk = evidence.get("S10_VENDOR_PLATFORM_SDK", "")
+        expected_vndk = evidence.get("S10_VENDOR_VNDK", "")
+        if not expected_sdk or vendor_sdk != expected_sdk:
+            errors.append(f"E732: vendor SDK differs from stock ({vendor_sdk!r} != {expected_sdk!r})")
+        actual_vndk = vendor_vndk or properties(work / "vendor/default.prop").get("ro.vndk.version", "")
+        if not expected_vndk or actual_vndk != expected_vndk:
+            errors.append(f"E733: vendor VNDK differs from stock ({actual_vndk!r} != {expected_vndk!r})")
     for relative in FRAMEWORK_ARCHIVES:
         p = work / relative
         if not p.is_file() or not zipfile.is_zipfile(p):
@@ -227,11 +237,12 @@ def main() -> int:
     parser.add_argument("--device", choices=TARGETS, required=True)
     parser.add_argument("--work-dir", type=Path, help="post-patch ROM work_dir")
     parser.add_argument("--stock-target", type=Path, help="matching extracted S10 stock firmware")
+    parser.add_argument("--vendor-abi", type=Path, help="verified stock vendor ABI manifest")
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
     errors = static_audit(args.source, args.device)
     if args.work_dir:
-        errors.extend(workdir_audit(args.work_dir, args.device, args.stock_target))
+        errors.extend(workdir_audit(args.work_dir, args.device, args.stock_target, args.vendor_abi))
     report = {
         "device": args.device, "errors": errors,
         "static_target_and_framework_contract_checked": True,
