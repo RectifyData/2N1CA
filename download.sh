@@ -49,9 +49,11 @@ donor_model="${SOURCE_FIRMWARE%%/*}"
 donor_remaining="${SOURCE_FIRMWARE#*/}"
 donor_region="${donor_remaining%%/*}"
 donor_cache="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
+donor_vendor_cache="$FW_DIR/${donor_model}_${donor_region}/vendor/build.prop"
 S10_DONOR_CACHED=false
 if [[ -s "$donor_cache" ]] &&
-   python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_cache" >/dev/null 2>&1; then
+   python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_cache" \
+     --vendor-build-prop "$donor_vendor_cache" >/dev/null 2>&1; then
   S10_DONOR_CACHED=true
   s10_info "Retaining verified cached One UI 8.5 donor; ignoring later Android versions"
 fi
@@ -119,7 +121,8 @@ donor_model="${SOURCE_FIRMWARE%%/*}"
 donor_rest="${SOURCE_FIRMWARE#*/}"
 donor_region="${donor_rest%%/*}"
 donor_prop="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
-python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_prop" ||
+python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_prop" \
+  --vendor-build-prop "$FW_DIR/${donor_model}_${donor_region}/vendor/build.prop" ||
   s10_die "Donor is not Android 16 / One UI 8.5. Provide a pinned compatible firmware archive."
 s10_info "Auditing S10 vendor HAL/init/VINTF/partition layout"
 python3 "$ROOT/scripts/internal/s10_vendor_audit.py" \

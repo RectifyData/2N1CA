@@ -18,7 +18,7 @@ def read_properties(path: Path) -> dict[str, str]:
                 if "=" in line and not line.lstrip().startswith("#"))
 
 
-def validate(props: dict[str, str]) -> None:
+def validate(props: dict[str, str], vendor_props: dict[str, str] | None = None) -> None:
     sdk = props.get("ro.build.version.sdk", "")
     if sdk != "36":
         raise DonorError(f"Expected Android 16 SDK 36, got {sdk!r}")
@@ -30,14 +30,25 @@ def validate(props: dict[str, str]) -> None:
     minor //= 100
     if (major, minor) != (8, 5):
         raise DonorError(f"Expected One UI 8.5 (80500), got {raw!r}; do not sync to 9.0")
-    model = props.get("ro.product.model", "")
-    if model and not (
-        "S25 FE" in model.upper() or model.upper().startswith("SM-S731")
+    # A system-only build.prop is insufficient proof of the SoC: Samsung
+    # normally publishes the board platform on the vendor partition.
+    if vendor_props is None:
+        raise DonorError("Missing donor vendor/build.prop: board identity is unverified")
+    model = props.get("ro.product.model", "") or vendor_props.get("ro.product.vendor.model", "")
+    if not model or not (
+        "S25 FE" in model.upper() or model.upper().startswith("SM-S731B")
     ):
-        raise DonorError(f"Donor model does not identify Galaxy S25 FE: {model!r}")
-    board = props.get("ro.board.platform", "") or props.get("ro.hardware", "")
-    if board and board.lower() != "s5e9945":
-        raise DonorError(f"Wrong donor SoC board {board!r}; expected S25 FE s5e9945")
+        raise DonorError(f"Donor model does not prove Galaxy S25 FE: {model!r}")
+    vendor_board = vendor_props.get("ro.board.platform", "").strip()
+    if not vendor_board:
+        raise DonorError("Donor vendor/build.prop is missing ro.board.platform")
+    # This is an expected source hardware contract, not proof of bootability.
+    # It is accepted only when the value is read from actual extracted firmware.
+    if vendor_board.lower() != "s5e9945":
+        raise DonorError(f"Unexpected donor vendor board {vendor_board!r}; expected s5e9945")
+    system_board = props.get("ro.board.platform", "").strip()
+    if system_board and system_board.lower() != vendor_board.lower():
+        raise DonorError(f"Donor system board {system_board!r} conflicts with vendor {vendor_board!r}")
 
 
 def validate_pinned_version(version: str) -> None:
@@ -60,20 +71,28 @@ def validate_pinned_version(version: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build_prop", type=Path, nargs="?")
+    parser.add_argument("--vendor-build-prop", type=Path,
+                        help="matching extracted S25 FE vendor/build.prop; mandatory for donor verification")
     parser.add_argument("--pinned-version", help="Validate an explicit Samsung FUS Android 16 donor build")
     args = parser.parse_args()
     try:
         if args.pinned_version:
             validate_pinned_version(args.pinned_version)
         if args.build_prop:
+            if args.vendor_build_prop is None:
+                raise DonorError("--vendor-build-prop required with build.prop")
             props = read_properties(args.build_prop)
-            validate(props)
+            vendor_props = read_properties(args.vendor_build_prop)
+            validate(props, vendor_props)
         elif not args.pinned_version:
             raise DonorError("Supply a build.prop file or --pinned-version")
     except (DonorError, OSError) as exc:
         print(f"2N1CA E630: One UI donor rejected: {exc}", file=sys.stderr)
         return 2
-    print("2N1CA donor verified: Android 16, One UI 8.5")
+    if args.build_prop:
+        print("2N1CA extracted donor properties verified (hardware/boot untested)")
+    else:
+        print("2N1CA donor version string syntax verified; firmware NOT yet checked")
     return 0
 
 

@@ -83,6 +83,12 @@ if [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]]; then
     # S25 FE VNDK compatibility baseline (not S10 target VNDK).
     SOURCE_BOARD_API_LEVEL=34
 
+    # Do not inherit Galaxy S22/Exynos2200 SSRM policy for the S25 FE donor.
+    # The values remain deliberately unconfigured until matching S25 FE
+    # firmware policies have been checked, never silently substituted.
+    SOURCE_DVFSAPP_CONFIG_SSRM_POLICY_FILENAME="${S10_DONOR_SSRM_POLICY:-UNVERIFIED_S25FE_SSRM}"
+    SOURCE_DVFSAPP_CONFIG_DVFS_POLICY_FILENAME="${S10_DONOR_DVFS_POLICY:-UNVERIFIED_S25FE_DVFS}"
+
     SOURCE_AUDIO_SUPPORT_ACH_RINGTONE=false
     SOURCE_CAMERA_SUPPORT_MASS_APP_FLAVOR=true
     SOURCE_COMMON_CONFIG_MDNIE_MODE="37905"
