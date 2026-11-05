@@ -18,7 +18,7 @@ SIZES = {
 }
 
 
-def make_pit(sizes=None, magic=mod.MAGIC):
+def make_pit(sizes=None, magic=mod.MAGIC, device_type=2):
     sizes = sizes or SIZES
     header = bytearray(28)
     struct.pack_into("<II", header, 0, magic, len(sizes))
@@ -26,7 +26,7 @@ def make_pit(sizes=None, magic=mod.MAGIC):
     cursor = 2048
     for idx, (name, blocks) in enumerate(sizes.items()):
         record = bytearray(mod.ENTRY)
-        struct.pack_into("<9I", record, 0, 0, 2, idx, 1, 1, cursor, blocks, 0, 0)
+        struct.pack_into("<9I", record, 0, 0, device_type, idx, 1, 1, cursor, blocks, 0, 0)
         record[36:36 + len(name)] = name.encode("ascii")
         records += record
         cursor += blocks
@@ -39,6 +39,22 @@ class PitLayoutTests(unittest.TestCase):
         self.assertEqual(result["BOOT"], 131072 * 512)
         self.assertIn("SYSTEM", result)
         self.assertNotIn("SUPER", result)
+
+    def test_ufs_block_units_use_4096_bytes(self):
+        ufs = {
+            "BOOT": 16384, "SYSTEM": 262144, "VENDOR": 131072,
+            "PRODUCT": 32768, "ODM": 8192,
+        }
+        layout = mod.validate_s10_layout(mod.parse_pit(
+            make_pit(ufs, device_type=8)
+        ))
+        self.assertEqual(layout["BOOT"], 16384 * 4096)
+        self.assertEqual(layout["SYSTEM"], 262144 * 4096)
+        self.assertNotEqual(layout["SYSTEM"], 262144 * 512)
+
+    def test_unsupported_pit_device_type_fails_closed(self):
+        with self.assertRaises(mod.LayoutError):
+            mod.parse_pit(make_pit(device_type=7))
 
     def test_reject_bad_magic(self):
         with self.assertRaises(mod.LayoutError):
