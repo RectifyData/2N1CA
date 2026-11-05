@@ -31,13 +31,40 @@ target_model="${TARGET_FIRMWARE%%/*}"
   s10_die "E635: Malformed target firmware identifier"
 [[ "$TARGET_FIRMWARE" != */UNCONFIGURED ]] ||
   s10_die "E636: Stock firmware identifier is not configured"
+donor_model="${SOURCE_FIRMWARE%%/*}"
+donor_remaining="${SOURCE_FIRMWARE#*/}"
+donor_region="${donor_remaining%%/*}"
+donor_cache="$FW_DIR/${donor_model}_${donor_region}/system/system/build.prop"
+S10_DONOR_CACHED=false
+if [[ -s "$donor_cache" ]] &&
+   python3 "$ROOT/scripts/internal/validate_oneui_donor.py" "$donor_cache" >/dev/null 2>&1; then
+  S10_DONOR_CACHED=true
+  s10_info "Retaining verified cached One UI 8.5 donor; ignoring later Android versions"
+fi
+if ! $S10_DONOR_CACHED && [[ -z "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
+  s10_die "E638: No verified cached One UI 8.5 donor and no S10_ONEUI_85_SOURCE_VERSION. Current FUS latest may be Android 17; refuse an unpinned download."
+fi
 bash "$ROOT/scripts/build_dependencies.sh" --check-tools ||
   s10_die "Host tools absent; run ./prepare.sh $DEVICE first"
 options=()
 [[ "$MODE" == "--force" ]] && options=(--force)
-s10_info "Downloading Samsung source and stock target firmware for $DEVICE"
+if $S10_DONOR_CACHED; then
+  options+=(--ignore-source)
+fi
+s10_info "Downloading firmware for $DEVICE (validated One UI donor is pinned or cached)"
 "$ROOT/scripts/download_fw.sh" "${options[@]}" ||
   s10_die "Firmware download failed; check model/CSC, connection and credentials"
+if ! $S10_DONOR_CACHED; then
+  # Samloader/FUS can fall back to newer releases when historical firmware
+  # has been withdrawn. Never silently accept an Android 17 archive.
+  S10_PINNED_PDA="${S10_ONEUI_85_SOURCE_VERSION%%/*}"
+  S10_DONOR_ODIN="$ODIN_DIR/${donor_model}_${donor_region}"
+  shopt -s nullglob
+  s10_pinned_ap=("$S10_DONOR_ODIN"/AP_"$S10_PINNED_PDA"*.tar.md5)
+  shopt -u nullglob
+  [[ "${#s10_pinned_ap[@]}" -eq 1 ]] ||
+    s10_die "E639: Pinned One UI 8.5 AP archive not found (FUS served another version or package missing)"
+fi
 # Derive legacy partition capacities from the actual stock target CSC PIT.
 # Do not use guessed partition sizes from a different model or firmware.
 model="${TARGET_FIRMWARE%%/*}"
