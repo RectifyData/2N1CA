@@ -81,3 +81,31 @@ s10_require_vendor_abi() {
       s10_die "E752: Missing or invalid stock vendor ABI value for $name: $value"
   done
 }
+
+# The donor thermal policy must be taken from the exact extracted S25 FE
+# floating-feature.xml and Device Health Manager APK. No S22 fallback.
+s10_require_donor_thermal() {
+  local dev="$1" path="$S10_ROOT/out/target/$1/donor-thermal.env"
+  [[ -s "$path" ]] || s10_die "E754: Missing S25 FE thermal evidence"
+  local model="${SOURCE_FIRMWARE%%/*}" rest="${SOURCE_FIRMWARE#*/}"
+  local region="${rest%%/*}"
+  local fw="$S10_ROOT/out/fw/${model}_${region}"
+  local floating="$fw/system/system/etc/floating_feature.xml"
+  local apk="$fw/system/system/priv-app/SamsungDeviceHealthManagerService/SamsungDeviceHealthManagerService.apk"
+  [[ -s "$floating" && -s "$apk" ]] ||
+    s10_die "E755: Required donor thermal files are absent"
+  local ffsha apksha
+  ffsha="$(sha256sum "$floating" | cut -d' ' -f1)"
+  apksha="$(sha256sum "$apk" | cut -d' ' -f1)"
+  grep -qxF "S10_DONOR_FLOATING_FEATURE_SHA256=\"$ffsha\"" "$path" ||
+    s10_die "E756: Donor floating features changed since thermal validation"
+  grep -qxF "S10_DONOR_HEALTH_APK_SHA256=\"$apksha\"" "$path" ||
+    s10_die "E757: Donor Device Health Manager changed since thermal validation"
+  local ssrm="${SOURCE_DVFSAPP_CONFIG_SSRM_POLICY_FILENAME:-}" dvfs="${SOURCE_DVFSAPP_CONFIG_DVFS_POLICY_FILENAME:-}"
+  [[ "$ssrm" != *UNVERIFIED* && "$dvfs" != *UNVERIFIED* ]] ||
+    s10_die "E758: S25 FE thermal names remain unverified"
+  grep -qxF "S10_DONOR_SSRM_POLICY=\"$ssrm\"" "$path" ||
+    s10_die "E759: Configured SSRM policy differs from extracted S25 FE firmware"
+  grep -qxF "S10_DONOR_DVFS_POLICY=\"$dvfs\"" "$path" ||
+    s10_die "E759: Configured DVFS policy differs from extracted S25 FE firmware"
+}
