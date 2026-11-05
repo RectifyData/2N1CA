@@ -55,6 +55,8 @@ jobs:
       S10_ONEUI_85_SOURCE_VERSION: ${{ secrets.S10_SOURCE_VERSION }}
       S10_TARGET_FIRMWARE: ${{ secrets.S10_TARGET_FIRMWARE }}
       S10_TARGET_FIRMWARE_VERSION: ${{ secrets.S10_TARGET_FIRMWARE_VERSION }}
+      S10_CHECKVINTF_URL: ${{ secrets.S10_CHECKVINTF_URL }}
+      S10_CHECKVINTF_SHA256: ${{ secrets.S10_CHECKVINTF_SHA256 }}
     steps:
       - uses: actions/checkout@v4
         with:
