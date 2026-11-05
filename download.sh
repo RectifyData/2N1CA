@@ -87,7 +87,13 @@ else
   s10_die "No matching CSC PIT/verified cached layout for $DEVICE; unsafe to build images"
 fi
 s10_info "Extracting downloaded firmware for $DEVICE"
-"$ROOT/scripts/extract_fw.sh" "${options[@]}" ||
+extract_options=("${options[@]}")
+if ! $S10_DONOR_CACHED; then
+  # Force replacement of a stale Android 17 source extraction even if its
+  # old .extracted marker looks newer than the pinned Android 16 donor.
+  extract_options=(--force)
+fi
+"$ROOT/scripts/extract_fw.sh" "${extract_options[@]}" ||
   s10_die "Firmware extraction failed; check storage, tar integrity and mount permissions"
 # The upstream firmware downloader normally selects the newest FUS release.
 # Verify the actual extracted firmware, never assume it remained One UI 8.5.
