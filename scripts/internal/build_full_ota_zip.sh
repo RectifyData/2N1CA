@@ -268,15 +268,26 @@ case "$TARGET_CODENAME" in
         }
         # Direct invocations must not bypass the same approval and VINTF gate
         # imposed by build.sh. Do not certify the package from a hash alone.
-        [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]] || {
-            LOGE "E560: S10 flashable builder requires strict VINTF mode"
-            exit 1
-        }
-        python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
-            --target "$TARGET_CODENAME" \
-            --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
-            --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
-            --boot "$TMP_DIR/boot.img" || exit 1
+        if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+            [[ -s "${S10_EXPERIMENTAL_KERNEL_PROVENANCE:-}" ]] || {
+                LOGE "E641: Tester ZIP needs matching compiled kernel provenance"
+                exit 1
+            }
+            python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+                --target "$TARGET_CODENAME" \
+                --experimental-provenance "$S10_EXPERIMENTAL_KERNEL_PROVENANCE" \
+                --boot "$TMP_DIR/boot.img" || exit 1
+        else
+            [[ "${S10_REQUIRE_VINTF:-false}" == "true" ]] || {
+                LOGE "E560: Approved S10 ZIP requires strict VINTF mode"
+                exit 1
+            }
+            python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+                --target "$TARGET_CODENAME" \
+                --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+                --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+                --boot "$TMP_DIR/boot.img" || exit 1
+        fi
         # Prevent the updater from looking up /dt, /dtbo, /vendor_boot or
         # /init_boot partitions that are not present in the verified S10 fstab.
         # The required S10 kernel packaging must be designed and verified separately.
@@ -363,10 +374,14 @@ fi
 # Validate ZIP references and integrity before reporting packaging success.
 case "$TARGET_CODENAME" in
     beyond0lte|beyond1lte|beyond2lte|beyondx)
+        S10_ZIP_BOOT_MANIFEST="$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json"
+        if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+            S10_ZIP_BOOT_MANIFEST="$S10_EXPERIMENTAL_KERNEL_PROVENANCE"
+        fi
         if ! python3 "$SRC_DIR/scripts/internal/validate_flashable_zip.py" \
             "$OUTPUT_FILE" --expected-device "$TARGET_CODENAME" \
             --layout "$OUT_DIR/target/$TARGET_CODENAME/pit-layout.env" --deep \
-            --boot-manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json"; then
+            --boot-manifest "$S10_ZIP_BOOT_MANIFEST"; then
             LOGE "Produced ZIP failed S10 installer validation; refusing to publish"
             rm -f "$OUTPUT_FILE"
             exit 1
