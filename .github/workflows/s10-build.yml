@@ -112,8 +112,8 @@ jobs:
     env:
       DEVICE: ${{ inputs.device || 'beyond2lte' }}
       MODE: ${{ inputs.mode || 'tester-zip' }}
-      S10_EXPERIMENTAL_BOOT_IMAGE: ${{ runner.temp }}/s10-boot/boot.img
-      S10_EXPERIMENTAL_KERNEL_PROVENANCE: ${{ runner.temp }}/s10-boot/provenance.json
+      S10_EXPERIMENTAL_BOOT_IMAGE: ${{ github.workspace }}/s10-boot/boot.img
+      S10_EXPERIMENTAL_KERNEL_PROVENANCE: ${{ github.workspace }}/s10-boot/provenance.json
       S10_ONEUI_85_SOURCE_FIRMWARE: ${{ secrets.S10_SOURCE_FIRMWARE }}
       S10_ONEUI_85_SOURCE_VERSION: ${{ secrets.S10_SOURCE_VERSION }}
       S10_TARGET_FIRMWARE: ${{ secrets.S10_TARGET_FIRMWARE }}
@@ -129,7 +129,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: s10-tester-kernel-${{ env.DEVICE }}
-          path: ${{ runner.temp }}/s10-boot
+          path: ${{ github.workspace }}/s10-boot
       - name: Prepare host dependencies and disk
         shell: bash
         run: |
