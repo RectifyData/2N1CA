@@ -32,6 +32,8 @@ class LayoutError(ValueError):
 
 def read_pit_from_source(path: Path) -> tuple[bytes, str]:
     if path.suffix.lower() == ".pit":
+        if path.stat().st_size > LIMIT:
+            raise LayoutError("Raw PIT exceeds size limit")
         data = path.read_bytes()
         return data, path.name
     with tarfile.open(path, mode="r:*") as archive:
