@@ -51,6 +51,12 @@ class VendorABITests(unittest.TestCase):
         with self.assertRaises(mod.ABIError):
             mod.collect(self.root, HASH)
 
+    def test_spoofed_codename_prefix_rejected(self):
+        p = self.root / "vendor/build.prop"
+        p.write_text(p.read_text().replace("beyond2lte", "beyond2lte_fake"))
+        with self.assertRaisesRegex(mod.ABIError, "Unexpected stock S10 vendor device"):
+            mod.collect(self.root, HASH)
+
     def test_no_firmware_hash_rejected(self):
         with self.assertRaises(mod.ABIError):
             mod.collect(self.root, "not-a-hash")
