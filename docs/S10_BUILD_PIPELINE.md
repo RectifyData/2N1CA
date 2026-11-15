@@ -29,6 +29,43 @@ Supported target names: `beyond0lte` (S10e), `beyond1lte` (S10),
   references, payload presence, ZIP CRCs, forbidden S10 partition operations,
   and writes `.sha256` beside the validated ZIP.
 
+## Experimental TWRP ZIP for testers (not boot-verified)
+
+Use **Actions → 2N1CA S10 sync and build**, branch
+`port/s10-exynos9820`, device `beyond2lte`, mode
+`tester-zip`. This builds the pinned Android-Artisan Exynos9820 kernel
+in a separate job, records the exact `boot.img` SHA256 and commit,
+downloads its compiled artifact, and builds a complete recovery ZIP from
+the actual donor and S10 stock firmware. If packaging and static integrity
+checks pass, a **clearly labelled untested prerelease** is created.
+
+The normal full `build` mode still requires independent physical
+boot verification. In the `tester-zip` mode **only**, prior boot approval
+is replaced by kernel compilation provenance and per-file SHA256 checks;
+device/model assertions, stock PIT sizes, OTA/ZIP integrity tests, and
+framework/security audits are retained. A missing `checkvintf` binary
+is recorded as unverified, and a present checker reporting incompatibility
+still blocks the build.
+
+Both source and matching S10+ stock firmware identifiers/versions must be
+provided through GitHub Actions secrets. They are **not guessed**.
+The kernel has not been demonstrated to boot Android 16. Its build
+provenance is not a hardware certification.
+
+For an equivalent **local tester compilation** after preparing a verified
+kernel artifact and its provenance JSON:
+
+```bash
+export S10_EXPERIMENTAL_BOOT_IMAGE=/absolute/path/to/compiled/boot.img
+export S10_EXPERIMENTAL_KERNEL_PROVENANCE=/absolute/path/to/provenance.json
+bash build.sh beyond2lte --tester-zip
+```
+
+**The output is experimental and may fail to install or boot.**
+Only use a sacrificial or fully recoverable test phone with matching PIT
+and verified stock restoration. The installer never silently repartitions,
+wipes EFS, flashes a donor bootloader or claims runtime compatibility.
+
 For a **non-flashable framework compilation** (no validated boot image
 required), use `./build.sh beyond2lte --target-files-only`. This still needs
 authorized One UI 8.5 donor firmware, matching S10 stock firmware, usable
