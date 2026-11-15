@@ -103,6 +103,14 @@ class PitLayoutTests(unittest.TestCase):
             self.assertEqual(actual, payload)
             self.assertEqual(name, "S10_CONFIG.pit")
 
+    def test_oversized_raw_pit_is_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pit = Path(folder) / "oversized.pit"
+            with pit.open("wb") as out:
+                out.truncate(mod.LIMIT + 1)
+            with self.assertRaisesRegex(mod.LayoutError, "size limit"):
+                mod.read_pit_from_source(pit)
+
     def test_missing_product_rejected(self):
         with self.assertRaises(mod.LayoutError):
             mod.validate_s10_layout(mod.parse_pit(make_pit({
