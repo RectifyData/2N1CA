@@ -73,6 +73,7 @@ def parse_pit(data: bytes) -> dict[str, int]:
     if not 1 <= count <= 256 or HEADER + count * ENTRY > len(data):
         raise LayoutError("Unreasonable/truncated PIT entry count")
     partitions: dict[str, int] = {}
+    ranges: dict[int, list[tuple[int, int, str]]] = {}
     for index in range(count):
         offset = HEADER + ENTRY * index
         # BinaryType, DeviceType, Id, Attributes, UpdateAttributes,
@@ -93,6 +94,17 @@ def parse_pit(data: bytes) -> dict[str, int]:
                 raise LayoutError(f"Unsupported PIT device type {device_type} for {name}")
             # Ignore non-OS entries with proprietary encoding.
             continue
+        # Block addresses are relative to their physical storage device. A
+        # conflicting PIT can otherwise certify two different OS partitions
+        # for the same physical blocks, risking destructive overwrites.
+        end = start + blocks
+        for other_start, other_end, other_name in ranges.get(device_type, []):
+            if start < other_end and other_start < end:
+                raise LayoutError(
+                    f"Overlapping PIT ranges on device {device_type}: "
+                    f"{name} overlaps {other_name}"
+                )
+        ranges.setdefault(device_type, []).append((start, end, name))
         partitions[name] = blocks * DEVICE_BLOCK_BYTES[device_type]
     return partitions
 
