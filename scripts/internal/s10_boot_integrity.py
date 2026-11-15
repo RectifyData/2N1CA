@@ -93,20 +93,87 @@ def verify_boot(boot: Path, manifest: Path, target: str, test_report: Path) -> d
             "hash_matched": True, "on_device_boot_verified_by_this_tool": False}
 
 
+def verify_experimental_boot(boot: Path, provenance: Path, target: str) -> dict:
+    """Check compiled test boot bytes, not physical boot or flash safety."""
+    if target not in MODELS:
+        raise BootError(f"E640: Unknown S10 variant {target!r}")
+    if not provenance.is_file():
+        raise BootError("E641: Missing experimental kernel compilation provenance")
+    try:
+        entry = json.loads(provenance.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BootError(f"E642: Invalid experimental kernel provenance: {exc}") from exc
+    if not isinstance(entry, dict) or entry.get("target") != target:
+        raise BootError("E643: Compiler artifact targets another S10 model")
+    digest, commit = entry.get("boot_sha256"), entry.get("kernel_commit")
+    run_id, version = entry.get("workflow_run_id"), entry.get("kernel_source_version")
+    if not isinstance(digest, str) or not SHA.fullmatch(digest):
+        raise BootError("E644: Missing SHA256 of compiled boot image")
+    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+        raise BootError("E645: Missing full kernel source commit")
+    if type(run_id) is not int or run_id <= 0:
+        raise BootError("E646: Missing compiler workflow run ID")
+    if not isinstance(version, str) or not re.fullmatch(
+        r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+._a-zA-Z0-9]*)?", version
+    ):
+        raise BootError("E647: Invalid kernel source release")
+    if (entry.get("compilation_verified") is not True or
+        entry.get("hardware_boot_verified") is not False or
+        entry.get("device_verified") is not False or
+        entry.get("is_flash_safe") is not False):
+        raise BootError("E648: Artifact is not explicitly marked compiled but untested")
+    if not boot.is_file() or boot.is_symlink() or boot.stat().st_size < 4096:
+        raise BootError("E649: Missing or truncated compiled boot image")
+    with boot.open("rb") as stream:
+        header = stream.read(48)
+    if len(header) < 44 or header[:8] != b"ANDROID!":
+        raise BootError("E650: Compiled boot image lacks Android magic")
+    size = struct.unpack_from("<I", header, 8)[0]
+    header_version = struct.unpack_from("<I", header, 40)[0]
+    if size < 1 or size >= boot.stat().st_size or header_version > 4:
+        raise BootError("E651: Compiled boot image header is invalid")
+    if (type(entry.get("boot_header_version")) is not int or
+        entry["boot_header_version"] != header_version or
+        type(entry.get("boot_file_size")) is not int or
+        entry["boot_file_size"] != boot.stat().st_size):
+        raise BootError("E652: Compiler output size/header changed")
+    actual = hashlib.sha256()
+    with boot.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            actual.update(chunk)
+    if actual.hexdigest() != digest:
+        raise BootError("E653: Boot image differs from its compiled kernel artifact")
+    return {"target": target, "boot_sha256": digest, "kernel_commit": commit,
+            "kernel_source_version": version, "compilation_verified": True,
+            "hardware_boot_verified": False, "is_flash_safe": False}
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--target", required=True, choices=sorted(MODELS))
-    p.add_argument("--manifest", type=Path, required=True)
-    p.add_argument("--test-report", type=Path, required=True)
+    p.add_argument("--manifest", type=Path)
+    p.add_argument("--test-report", type=Path)
+    p.add_argument("--experimental-provenance", type=Path,
+                   help="Compile-only kernel provenance for unverified tester ROMs")
     p.add_argument("--boot", type=Path)
     args = p.parse_args()
     try:
-        if args.boot:
-            result = verify_boot(args.boot, args.manifest, args.target, args.test_report)
+        if args.experimental_provenance is not None:
+            if args.boot is None or args.manifest is not None or args.test_report is not None:
+                raise BootError("E654: Tester mode requires --boot and experimental provenance only")
+            result = verify_experimental_boot(
+                args.boot, args.experimental_provenance, args.target
+            )
             print(json.dumps(result, sort_keys=True))
         else:
-            load_evidence(args.manifest, args.target, args.test_report)
-            print("2N1CA: boot evidence present; image hash NOT YET CHECKED")
+            if args.manifest is None or args.test_report is None:
+                raise BootError("E620: Approved build needs boot manifest and device report")
+            if args.boot:
+                result = verify_boot(args.boot, args.manifest, args.target, args.test_report)
+                print(json.dumps(result, sort_keys=True))
+            else:
+                load_evidence(args.manifest, args.target, args.test_report)
+                print("2N1CA: boot evidence present; image hash NOT YET CHECKED")
     except (OSError, BootError) as exc:
         print(f"2N1CA boot gate: {exc}", file=sys.stderr)
         return 2

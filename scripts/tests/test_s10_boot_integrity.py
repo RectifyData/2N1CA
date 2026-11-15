@@ -45,6 +45,58 @@ class BootEvidenceTests(unittest.TestCase):
     def write_manifest(self):
         self.manifest.write_text(json.dumps(self.entry))
 
+    def make_experimental_manifest(self):
+        path = self.root / "kernel-build-provenance.json"
+        path.write_text(json.dumps({
+            "target": self.device,
+            "boot_sha256": hashlib.sha256(self.image.read_bytes()).hexdigest(),
+            "kernel_commit": "a" * 40,
+            "workflow_run_id": 9876,
+            "kernel_source_version": "4.14.333",
+            "boot_header_version": 1,
+            "boot_file_size": self.image.stat().st_size,
+            "compilation_verified": True,
+            "hardware_boot_verified": False,
+            "device_verified": False,
+            "is_flash_safe": False,
+        }))
+        return path
+
+    def test_compiled_boot_accepted_without_previous_boot_report(self):
+        manifest = self.make_experimental_manifest()
+        result = boot.verify_experimental_boot(self.image, manifest, self.device)
+        self.assertTrue(result["compilation_verified"])
+        self.assertFalse(result["hardware_boot_verified"])
+
+    def test_changed_compiled_boot_bytes_rejected(self):
+        manifest = self.make_experimental_manifest()
+        data = bytearray(self.image.read_bytes())
+        data[-1] ^= 0xff
+        self.image.write_bytes(data)
+        with self.assertRaisesRegex(boot.BootError, "E653"):
+            boot.verify_experimental_boot(self.image, manifest, self.device)
+
+    def test_compiled_boot_wrong_device_rejected(self):
+        manifest = self.make_experimental_manifest()
+        with self.assertRaisesRegex(boot.BootError, "E643"):
+            boot.verify_experimental_boot(self.image, manifest, "beyond1lte")
+
+    def test_compiled_boot_needs_compilation_proof(self):
+        manifest = self.make_experimental_manifest()
+        payload = json.loads(manifest.read_text())
+        payload["compilation_verified"] = False
+        manifest.write_text(json.dumps(payload))
+        with self.assertRaisesRegex(boot.BootError, "E648"):
+            boot.verify_experimental_boot(self.image, manifest, self.device)
+
+    def test_tester_manifest_cannot_claim_safety(self):
+        manifest = self.make_experimental_manifest()
+        payload = json.loads(manifest.read_text())
+        payload["is_flash_safe"] = True
+        manifest.write_text(json.dumps(payload))
+        with self.assertRaisesRegex(boot.BootError, "E648"):
+            boot.verify_experimental_boot(self.image, manifest, self.device)
+
     def test_correct_hash_and_provenance(self):
         result = boot.verify_boot(self.image, self.manifest, self.device, self.report)
         self.assertTrue(result["hash_matched"])
