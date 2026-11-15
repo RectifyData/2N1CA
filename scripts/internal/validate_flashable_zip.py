@@ -247,6 +247,22 @@ def validate(path, expected=None, deep=False, layout=None, boot_manifest=None):
                     transferpart = transfer.removesuffix(".transfer.list")
                     if destpart not in S10_SYSTEM or destpart != transferpart:
                         error("E544", f"Unsafe OTA write: {transfer} to {destination}")
+                # Every partition payload must have exactly one matching write.
+                # A ZIP containing valid-but-unused payloads, duplicated writes,
+                # or a swapped .new.dat/.patch.dat pair must fail verification.
+                for partition in partitions:
+                    writes = [(transfer, data, patch) for transfer, data, patch
+                              in operations if transfer == f"{partition}.transfer.list"]
+                    if len(writes) != 1:
+                        error("E546", f"{partition}: expected exactly one block update, got {len(writes)}")
+                    for _, data, patch in writes:
+                        if data not in (f"{partition}.new.dat", f"{partition}.new.dat.br") or patch != f"{partition}.patch.dat":
+                            error("E547", f"{partition}: block updater references mismatched payloads")
+                for file in files:
+                    if "/" not in file and file.endswith((".new.dat", ".new.dat.br", ".patch.dat")):
+                        partition = file.split(".", 1)[0]
+                        if partition not in partitions:
+                            error("E548", f"Orphaned OTA payload without transfer list: {file}")
                 # Generated S10 full-OTAs only need block writes, boot extraction,
                 # assertions and progress UI. Reject arbitrary shell execution or
                 # extra partition modification commands in custom Edify snippets.
