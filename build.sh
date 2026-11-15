@@ -5,15 +5,28 @@ set -eo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=scripts/lib/s10_pipeline.sh
 source "$ROOT/scripts/lib/s10_pipeline.sh"
-[[ "$#" -ge 1 && "$#" -le 2 ]] || s10_die "Usage: ./build.sh beyond2lte [--target-files-only]"
+[[ "$#" -ge 1 && "$#" -le 2 ]] || s10_die "Usage: ./build.sh beyond2lte [--target-files-only|--tester-zip]"
 MODE="${2:-}"
-[[ -z "$MODE" || "$MODE" == "--target-files-only" ]] ||
+[[ -z "$MODE" || "$MODE" == "--target-files-only" || "$MODE" == "--tester-zip" ]] ||
   s10_die "Unsupported build mode: $MODE"
 DEVICE="$1"
 s10_require_target "$DEVICE"
 # STOP before packaging if the required Android 16-compatible kernel port is absent.
 # A working stock Android 12 kernel cannot be assumed compatible with One UI 8.
-if [[ "$MODE" != "--target-files-only" ]]; then
+if [[ "$MODE" == "--tester-zip" ]]; then
+  # A test ZIP cannot require a boot report from a ZIP that does not yet exist.
+  # Require kernel compilation provenance and exact artifact bytes instead.
+  export S10_TESTER_BUILD=true
+  export S10_REQUIRE_VINTF=false
+  [[ -s "${S10_EXPERIMENTAL_BOOT_IMAGE:-}" && ! -L "${S10_EXPERIMENTAL_BOOT_IMAGE:-}" ]] ||
+    s10_die "E640: Set S10_EXPERIMENTAL_BOOT_IMAGE to a compiled kernel boot.img"
+  [[ -s "${S10_EXPERIMENTAL_KERNEL_PROVENANCE:-}" ]] ||
+    s10_die "E641: Set matching S10_EXPERIMENTAL_KERNEL_PROVENANCE"
+  python3 "$ROOT/scripts/internal/s10_boot_integrity.py" \
+    --target "$DEVICE" --boot "$S10_EXPERIMENTAL_BOOT_IMAGE" \
+    --experimental-provenance "$S10_EXPERIMENTAL_KERNEL_PROVENANCE" ||
+    s10_die "E642: Compiled kernel and provenance do not match"
+elif [[ "$MODE" != "--target-files-only" ]]; then
   # Never run long downloads for a flashable candidate without provisioned VINTF.
   export S10_REQUIRE_VINTF=true
   # An empty or arbitrary "verified" file must not enable flashing.
@@ -49,11 +62,14 @@ if [[ "$MODE" == "--target-files-only" ]]; then
 else
   # A flashable candidate must pass the host AOSP checkvintf compatibility
   # checker. Merely having well-formed XML is not sufficient.
-  export S10_REQUIRE_VINTF=true
+  if [[ "$MODE" != "--tester-zip" ]]; then
+    export S10_REQUIRE_VINTF=true
+  fi
   "$ROOT/scripts/make_rom.sh" --force --build-rom-zip ||
     s10_die "ROM packaging failed; no release candidate should be published"
   s10_info "Step 4/4: validate the built flashable ZIP"
   bash "$ROOT/verify.sh" "$DEVICE" ||
     s10_die "ZIP verification failed; do not flash or release"
   s10_info "Static ZIP checks passed. On-device bootability is NOT verified."
+  [[ "$MODE" != "--tester-zip" ]] || s10_info "TESTER ONLY: compiled recovery ZIP, never boot-certified."
 fi
