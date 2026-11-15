@@ -138,6 +138,11 @@ GENERATE_UPDATER_SCRIPT()
 
         PRINT_HEADER "$BUILD_INFO" || exit 1
 
+        if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+            echo 'ui_print("2N1CA EXPERIMENTAL TESTER BUILD — BOOT NOT VERIFIED");'
+            echo 'ui_print("Only install on a fully recoverable test device.");'
+        fi
+
         if $TARGET_USE_DYNAMIC_PARTITIONS; then
             # https://android.googlesource.com/platform/build/+/refs/tags/android-15.0.0_r1/tools/releasetools/common.py#4007
             echo -e "\n# --- Start patching dynamic partitions ---\n"
@@ -351,6 +356,16 @@ if [ -f "$SRC_DIR/target/$TARGET_CODENAME/installer/customize.sh" ]; then
     . "$SRC_DIR/target/$TARGET_CODENAME/installer/customize.sh"
     ) || exit 1
     LOG_STEP_OUT
+fi
+
+if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+    cat > "$TMP_DIR/UNTESTED-TESTER-BUILD.txt" <<'EOF'
+2N1CA S10+ EXPERIMENTAL TESTER BUILD — NOT BOOT-VERIFIED
+This ZIP has passed static source, image-integrity and package checks only.
+Kernel compilation and a SHA256 match do not establish boot compatibility.
+May fail installation, bootloop, or require full stock restoration.
+For fully recoverable test hardware only. Do not flash to an only device.
+EOF
 fi
 
 LOG "- Creating zip"
