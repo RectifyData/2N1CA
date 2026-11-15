@@ -163,7 +163,8 @@ set -o allexport; source "$OUT_DIR/config.sh"; set +o allexport
 unset TARGETS SELECTED_TARGET
 
 echo "=============================="
-sed "/Automatically/d" "$OUT_DIR/config.sh"
+# Never log potentially private Samsung firmware IMEI or serial identifiers.
+sed -E '/Automatically/d; s#^((SOURCE|TARGET)_FIRMWARE)=.*#\1="<redacted>"#' "$OUT_DIR/config.sh"
 echo "=============================="
 
 return 0

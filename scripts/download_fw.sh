@@ -113,7 +113,26 @@ PREPARE_SCRIPT "$@"
 for i in "${FIRMWARES[@]}"; do
     PARSE_FIRMWARE_STRING "$i" || exit 1
 
-    LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
+    # Only the S10/One UI 8.5 port may pin an older source donor.
+    # Samsung's latest S25 FE FUS update may now be One UI 9 / Android 17.
+    DONOR_PINNED=false
+    TARGET_PINNED=false
+    if [[ "${TARGET_PLATFORM:-}" == "exynos9820" && "$MODEL" == "SM-S731B" &&
+          -n "${S10_ONEUI_85_SOURCE_VERSION:-}" ]]; then
+        if ! python3 "$SRC_DIR/scripts/internal/validate_oneui_donor.py" \
+                --pinned-version "$S10_ONEUI_85_SOURCE_VERSION" >/dev/null; then
+            LOGE "E637: Invalid S25 FE pinned firmware version"
+            exit 1
+        fi
+        LATEST_FIRMWARE="$S10_ONEUI_85_SOURCE_VERSION"
+        DONOR_PINNED=true
+    elif [[ "${TARGET_PLATFORM:-}" == "exynos9820" &&
+            "$MODEL" == SM-G97* && -n "${S10_TARGET_FIRMWARE_VERSION:-}" ]]; then
+        LATEST_FIRMWARE="$S10_TARGET_FIRMWARE_VERSION"
+        TARGET_PINNED=true
+    else
+        LATEST_FIRMWARE="$(GET_LATEST_FIRMWARE "$MODEL" "$CSC")"
+    fi
     if [ ! "$LATEST_FIRMWARE" ]; then
         LOGE "Latest available firmware could not be fetched"
         exit 1
@@ -126,7 +145,26 @@ for i in "${FIRMWARES[@]}"; do
 
     LOG_STEP_IN
 
-    if ! $FORCE; then
+    if { $DONOR_PINNED || $TARGET_PINNED; } && ! $FORCE; then
+        # Never treat a newer Android release as a valid substitute for
+        # the pinned Android 16 One UI 8.5 donor.
+        if [[ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]] &&
+           [[ "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" == "$LATEST_FIRMWARE" ]] &&
+           python3 "$SRC_DIR/scripts/internal/validate_oneui_donor.py" \
+             "$FW_DIR/${MODEL}_${CSC}/system/system/build.prop" >/dev/null 2>&1; then
+            LOG "- Verified cached pinned donor; skipping firmware download"
+            LOG_STEP_OUT; LOG_STEP_OUT
+            continue
+        fi
+        if [[ -f "$ODIN_DIR/${MODEL}_${CSC}/.downloaded" ]] &&
+           [[ "$(cat "$ODIN_DIR/${MODEL}_${CSC}/.downloaded")" == "$LATEST_FIRMWARE" ]]; then
+            LOG "- Matching pinned donor archive already downloaded"
+            LOG_STEP_OUT; LOG_STEP_OUT
+            continue
+        fi
+    fi
+
+    if ! $FORCE && ! $DONOR_PINNED && ! $TARGET_PINNED; then
         # Skip if firmware has been extracted and equal/newer than the one in FUS
         if [ -f "$FW_DIR/${MODEL}_${CSC}/.extracted" ]; then
             if COMPARE_SEC_BUILD_VERSION "$(cat "$FW_DIR/${MODEL}_${CSC}/.extracted")" "$LATEST_FIRMWARE"; then
@@ -154,7 +192,10 @@ for i in "${FIRMWARES[@]}"; do
     # Anan's samloader stores its logs in the current working directory, let's move into OUT_DIR just for this time
     (
     cd "$OUT_DIR" || exit 1
-    samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" download -O "$ODIN_DIR/${MODEL}_${CSC}" 1> /dev/null || exit 1
+    PINNED_DOWNLOAD_ARGS=()
+    if $DONOR_PINNED || $TARGET_PINNED; then PINNED_DOWNLOAD_ARGS=(-v "$LATEST_FIRMWARE"); fi
+    samloader -m "$MODEL" -r "$CSC" -i "$IMEI" -s "$SERIAL_NO" \
+        download "${PINNED_DOWNLOAD_ARGS[@]}" -O "$ODIN_DIR/${MODEL}_${CSC}" 1> /dev/null || exit 1
     )
 
     ZIP_FILE="$(find "$ODIN_DIR/${MODEL}_${CSC}" -name "*.zip" | sort -r | head -n 1)"

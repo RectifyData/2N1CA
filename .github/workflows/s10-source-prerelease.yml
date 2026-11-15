@@ -1,0 +1,61 @@
+name: Publish S10 source-only experimental prerelease
+on:
+  push:
+    branches: ['port/s10-exynos9820']
+    paths:
+      - '.github/workflows/s10-source-prerelease.yml'
+      - 'docs/S10_PORT_STATUS.md'
+      - 'prepare.sh'
+      - 'download.sh'
+      - 'build.sh'
+      - 'verify.sh'
+      - 'scripts/**'
+      - 'unica/configs/**'
+      - 'unica/patches/**'
+      - '.github/workflows/s10-*.yml'
+      - 'platform/exynos9820/**'
+      - 'target/beyond*/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  source-prerelease:
+    name: Validate and publish non-flashable source preview
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify S10-only source and regression tests
+        shell: bash
+        run: |
+          set -eo pipefail
+          test "$(find target -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 4
+          test "$(find platform -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1
+          for d in beyond0lte beyond1lte beyond2lte beyondx; do
+            test -s "target/$d/config.sh"
+            bash -n "target/$d/config.sh"
+          done
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+          for f in prepare.sh download.sh build.sh verify.sh scripts/lib/s10_pipeline.sh; do
+            bash -n "$f"
+          done
+          test -s docs/S10_PORT_STATUS.md
+          echo 'SOURCE PREVIEW ONLY. Not boot-tested or flashable.'
+      - name: Publish prerelease with mandatory safety warning
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="s10-source-preview-$(date -u +%Y%m%d)-${GITHUB_SHA:0:7}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists: $TAG"
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "2N1CA S10 source preview — NOT SAFE TO FLASH" \
+            --prerelease \
+            --notes-file docs/S10_PORT_STATUS.md
+          gh release view "$TAG" --json url,isPrerelease,tagName
