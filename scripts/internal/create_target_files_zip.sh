@@ -168,7 +168,12 @@ if [ -d "$WORK_DIR/kernel" ]; then
 
         LOG_STEP_IN "- Copying $f"
         EVAL "cp -a \"$WORK_DIR/kernel/$f\" \"$TMP_DIR/$f\"" || exit 1
-        if ! $TARGET_DISABLE_AVB_SIGNING; then
+        # Preserve the exact kernel compiler bytes for tester builds. Extra
+        # AVB footers here would break the recorded boot-image checksum.
+        if [[ "${S10_TESTER_BUILD:-false}" == "true" &&
+              "${TARGET_PLATFORM:-}" == "exynos9820" && "$f" == "boot.img" ]]; then
+            LOG "- Preserving compiled tester boot.img (AVB not verified)"
+        elif ! $TARGET_DISABLE_AVB_SIGNING; then
             SIGN_IMAGE_WITH_AVB "$TMP_DIR/$f" || exit 1
         fi
         LOG_STEP_OUT
@@ -178,16 +183,24 @@ fi
 # Target-files-only output remains explicitly non-flashable. A flashable
 # image requires byte-for-byte validation of the boot.img actually packaged.
 if [[ "${TARGET_PLATFORM:-}" == "exynos9820" &&
-      "${S10_REQUIRE_VINTF:-false}" == "true" ]]; then
+      ( "${S10_REQUIRE_VINTF:-false}" == "true" ||
+        "${S10_TESTER_BUILD:-false}" == "true" ) ]]; then
     [[ -s "$TMP_DIR/boot.img" ]] || {
         LOGE "E632: S10 flashable build has no boot.img"
         exit 1
     }
-    python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
-        --target "$TARGET_CODENAME" \
-        --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
-        --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
-        --boot "$TMP_DIR/boot.img" || exit 1
+    if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+        python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+            --target "$TARGET_CODENAME" \
+            --experimental-provenance "$S10_EXPERIMENTAL_KERNEL_PROVENANCE" \
+            --boot "$TMP_DIR/boot.img" || exit 1
+    else
+        python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+            --target "$TARGET_CODENAME" \
+            --manifest "$SRC_DIR/platform/exynos9820/kernel/boot-image-validated.json" \
+            --test-report "$OUT_DIR/target/$TARGET_CODENAME/boot-test-report.json" \
+            --boot "$TMP_DIR/boot.img" || exit 1
+    fi
 fi
 
 LOG "- Generating build_info.txt"
