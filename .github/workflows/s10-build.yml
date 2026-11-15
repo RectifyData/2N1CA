@@ -1,36 +1,41 @@
 name: 2N1CA S10 sync and build
 on:
+  # The change to this workflow triggers one S10+ tester build automatically.
+  # Subsequent builds can be requested manually without rebuilding on every push.
+  push:
+    branches: ['port/s10-exynos9820']
+    paths: ['.github/workflows/s10-build.yml']
   workflow_dispatch:
     inputs:
       device:
-        description: 'Galaxy S10 target'
-        required: true
+        description: 'Exynos Galaxy S10 target'
         type: choice
+        required: true
         default: beyond2lte
         options: [beyond0lte, beyond1lte, beyond2lte, beyondx]
       mode:
-        description: 'Config check or full firmware build'
+        description: 'Compile tester ZIP, stock-certified ZIP, or diagnostic target-files'
         type: choice
         required: true
-        default: config
-        options: [config, target-files, build]
-
-concurrency:
-  group: s10-build-${{ github.ref }}-${{ inputs.device }}
-  cancel-in-progress: false
+        default: tester-zip
+        options: [tester-zip, build, target-files, config]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: s10-build-${{ github.ref }}-${{ inputs.device || 'beyond2lte' }}
+  cancel-in-progress: false
 
 jobs:
   config:
-    name: Check S10 source and installer
+    name: Validate Galaxy S10 source
     runs-on: ubuntu-24.04
     env:
-      DEVICE: ${{ inputs.device }}
+      DEVICE: ${{ inputs.device || 'beyond2lte' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate host scripts and source metadata
+      - name: Source and regression tests
         shell: bash
         run: |
           set -eo pipefail
@@ -41,16 +46,74 @@ jobs:
           test "$TARGET_PLATFORM" = "exynos9820"
           test "$TARGET_USE_DYNAMIC_PARTITIONS" = "false"
           test "$TARGET_OS_FILE_SYSTEM_TYPE" = "ext4"
-          echo 'Configuration validation passed. Flash safety/bootability NOT established.'
+          echo 'Source checks passed; device boot and flash safety remain unverified.'
+
+  tester-kernel:
+    name: Build pinned Exynos9820 test kernel
+    runs-on: ubuntu-24.04
+    needs: config
+    if: ${{ github.event_name == 'push' || inputs.mode == 'tester-zip' }}
+    timeout-minutes: 120
+    env:
+      DEVICE: ${{ inputs.device || 'beyond2lte' }}
+      PINNED_KERNEL_SHA: 9a0a792d227c8ae6cddac0c9d68a8bb9782c44cb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+            bc bison build-essential ccache cpio curl flex libarchive-tools \
+            libelf-dev libssl-dev python3 rsync unzip xz-utils zip
+      - name: Clone exact reviewed kernel revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init kernel
+          git -C kernel remote add origin https://github.com/Android-Artisan/android_kernel_samsung_exynos9820.git
+          git -C kernel fetch --depth=1 --filter=blob:none origin "$PINNED_KERNEL_SHA"
+          git -C kernel checkout --detach FETCH_HEAD
+          test "$(git -C kernel rev-parse HEAD)" = "$PINNED_KERNEL_SHA"
+          git -C kernel submodule update --init --recursive --depth=1
+      - name: Compile boot.img for selected Exynos S10
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd kernel && bash ./build.sh -m "$DEVICE" -k n -r n)
+          test -s "kernel/build/out/$DEVICE/boot.img"
+          test ! -L "kernel/build/out/$DEVICE/boot.img"
+          mkdir -p tester-kernel
+          cp "kernel/build/out/$DEVICE/boot.img" tester-kernel/boot.img
+          python3 scripts/internal/s10_kernel_provenance.py \
+            --target "$DEVICE" --boot tester-kernel/boot.img \
+            --makefile kernel/Makefile --commit "$PINNED_KERNEL_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output tester-kernel/provenance.json
+          python3 scripts/internal/s10_boot_integrity.py \
+            --target "$DEVICE" --boot tester-kernel/boot.img \
+            --experimental-provenance tester-kernel/provenance.json
+      - name: Preserve compiled kernel for ROM builder
+        uses: actions/upload-artifact@v4
+        with:
+          name: s10-tester-kernel-${{ env.DEVICE }}
+          path: tester-kernel/
+          retention-days: 7
+          if-no-files-found: error
 
   compile:
-    name: Experimental full ROM packaging
-    needs: config
-    if: ${{ inputs.mode != 'config' }}
+    name: Build requested Galaxy S10 ROM artifact
+    needs: [config, tester-kernel]
+    if: ${{ always() && needs.config.result == 'success' && (github.event_name == 'push' || inputs.mode != 'config') && (needs.tester-kernel.result == 'success' || (needs.tester-kernel.result == 'skipped' && github.event_name != 'push' && inputs.mode != 'tester-zip')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
-      DEVICE: ${{ inputs.device }}
+      DEVICE: ${{ inputs.device || 'beyond2lte' }}
+      MODE: ${{ inputs.mode || 'tester-zip' }}
+      S10_EXPERIMENTAL_BOOT_IMAGE: ${{ runner.temp }}/s10-boot/boot.img
+      S10_EXPERIMENTAL_KERNEL_PROVENANCE: ${{ runner.temp }}/s10-boot/provenance.json
       S10_ONEUI_85_SOURCE_FIRMWARE: ${{ secrets.S10_SOURCE_FIRMWARE }}
       S10_ONEUI_85_SOURCE_VERSION: ${{ secrets.S10_SOURCE_VERSION }}
       S10_TARGET_FIRMWARE: ${{ secrets.S10_TARGET_FIRMWARE }}
@@ -61,7 +124,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Prepare Linux packaging dependencies
+      - name: Retrieve exact compiled test kernel
+        if: ${{ env.MODE == 'tester-zip' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: s10-tester-kernel-${{ env.DEVICE }}
+          path: ${{ runner.temp }}/s10-boot
+      - name: Prepare host dependencies and disk
         shell: bash
         run: |
           set -eo pipefail
@@ -76,35 +145,80 @@ jobs:
           sudo modprobe erofs || true
           sudo modprobe f2fs || true
           df -h
-      - name: Generate S10 target and flashable ZIP (fails closed until kernel is validated)
+      - name: Compile One UI port and package output
         shell: bash
         run: |
           set -eo pipefail
-          if [[ "${{ inputs.mode }}" == "target-files" ]]; then
-            bash build.sh "$DEVICE" --target-files-only
-          else
-            bash build.sh "$DEVICE"
-          fi
-      - name: Collect validated experimental artifacts
-        if: ${{ success() && inputs.mode == 'build' }}
+          case "$MODE" in
+            tester-zip)
+              bash build.sh "$DEVICE" --tester-zip
+              ;;
+            build)
+              bash build.sh "$DEVICE"
+              ;;
+            target-files)
+              bash build.sh "$DEVICE" --target-files-only
+              ;;
+            *)
+              echo "Unsupported build mode: $MODE" >&2
+              exit 2
+              ;;
+          esac
+      - name: Archive tester or approved recovery ZIPs
+        if: ${{ success() && (env.MODE == 'tester-zip' || env.MODE == 'build') }}
         uses: actions/upload-artifact@v4
         with:
-          name: EXPERIMENTAL-UNVERIFIED-2N1CA-${{ env.DEVICE }}
+          name: S10-${{ env.DEVICE }}-${{ env.MODE }}-${{ github.run_id }}
           path: |
             out/2N1CA_*.zip
             out/2N1CA_*.zip.sha256
+          retention-days: 7
           if-no-files-found: error
-          retention-days: 2
-      - name: Collect non-flashable target-files for source diagnostics
-        if: ${{ success() && inputs.mode == 'target-files' }}
+      - name: Archive non-flashable target-files
+        if: ${{ success() && env.MODE == 'target-files' }}
         uses: actions/upload-artifact@v4
         with:
-          name: DO-NOT-FLASH-S10-target-files-${{ env.DEVICE }}
+          name: S10-target-files-${{ env.DEVICE }}-${{ github.run_id }}
           path: out/${{ env.DEVICE }}_*-target_files.zip
+          retention-days: 7
           if-no-files-found: error
-          retention-days: 2
-      - name: Notice
+      - name: Publish tester-only GitHub prerelease
+        if: ${{ success() && env.MODE == 'tester-zip' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          packages=(out/2N1CA_*_"$DEVICE"*.zip)
+          [[ "${#packages[@]}" -eq 1 ]] || {
+            echo "Expected one tester ZIP; found ${#packages[@]}" >&2
+            exit 1
+          }
+          package="${packages[0]}"
+          test -s "$package.sha256"
+          tag="s10-$DEVICE-untested-$GITHUB_RUN_ID"
+          cat > "$RUNNER_TEMP/s10-test-release.md" <<'EOF'
+          # UNTESTED 2N1CA S10 development build
+
+          **Testers only — experimental recovery ZIP, NOT boot verified.**
+
+          This artifact passed source and static ZIP integrity checks but has
+          **not** been proven to install, boot, or operate correctly.
+          Boot image is from a pinned experimental Exynos9820 kernel compilation.
+
+          Back up the test device and its stock firmware first. Do not use this
+          on an only device or daily driver. No repartitioning is included.
+          Calls, data, display, encryption, camera, thermal and recovery behavior
+          have not been validated. Real PIT layout must match the target layout.
+          EOF
+          gh release create "$tag" "$package" "$package.sha256" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "2N1CA S10 $DEVICE — UNTESTED tester build" \
+            --notes-file "$RUNNER_TEMP/s10-test-release.md"
+      - name: State experimental status
         if: always()
         run: |
-          echo 'No device was flashed during this workflow.'
-          echo 'Successful packaging does not establish that this ROM boots on the S10.'
+          echo 'No real device was flashed by this workflow.'
+          echo 'Kernel compilation, packaging and ZIP validation are NOT a boot test.'
+          echo 'Unverified tester ZIPs must never be described as stable or flash-safe.'
