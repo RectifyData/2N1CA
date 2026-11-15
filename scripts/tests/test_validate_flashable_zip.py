@@ -156,6 +156,37 @@ class InstallerZipTests(unittest.TestCase):
             ).encode(), "efs.img": b"danger"
         }))
 
+    def test_transfer_list_requires_its_own_write(self):
+        altered = INSTALLER.replace('system.transfer.list', 'vendor.transfer.list')
+        self.assertIn("E546", self.check(extras={
+            "META-INF/com/google/android/updater-script": altered.encode(),
+            "vendor.transfer.list": b"4\\n0\\n0\\n0\\n",
+            "vendor.new.dat": b"synthetic-payload",
+            "vendor.patch.dat": b"",
+        }))
+
+    def test_duplicate_block_update_rejected(self):
+        altered = INSTALLER.replace(
+            'package_extract_file("boot.img"',
+            'block_image_update("/dev/block/by-name/system", '
+            'package_extract_file("system.transfer.list"), '
+            '"system.new.dat", "system.patch.dat");\\n'
+            'package_extract_file("boot.img"'
+        )
+        self.assertIn("E546", self.check(extras={
+            "META-INF/com/google/android/updater-script": altered.encode()
+        }))
+
+    def test_swapped_new_payload_rejected(self):
+        altered = INSTALLER.replace('"system.new.dat"', '"vendor.new.dat"')
+        self.assertIn("E547", self.check(extras={
+            "META-INF/com/google/android/updater-script": altered.encode(),
+            "vendor.new.dat": b"unused",
+        }))
+
+    def test_orphaned_ota_payload_rejected(self):
+        self.assertIn("E548", self.check(extras={"vendor.new.dat": b"unused"}))
+
     def test_missing_block_reference_rejected(self):
         self.assertIn("E513", self.check(extras={
             "META-INF/com/google/android/updater-script":
