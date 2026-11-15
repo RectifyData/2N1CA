@@ -70,6 +70,16 @@ class PitLayoutTests(unittest.TestCase):
         with self.assertRaises(mod.LayoutError):
             mod.parse_pit(data)
 
+    def test_reject_overlapping_partitions(self):
+        data = bytearray(make_pit())
+        # Second entry (SYSTEM) starts inside the first (BOOT) range.
+        struct.pack_into("<I", data, mod.HEADER + mod.ENTRY + 20, 2049)
+        with self.assertRaisesRegex(mod.LayoutError, "Overlapping PIT ranges"):
+            mod.parse_pit(data)
+
+    def test_adjacent_partitions_are_not_overlapping(self):
+        self.assertEqual(len(mod.parse_pit(make_pit())), len(SIZES))
+
     def test_reject_unexpected_super(self):
         with self.assertRaises(mod.LayoutError):
             mod.validate_s10_layout(mod.parse_pit(make_pit({
