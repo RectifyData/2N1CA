@@ -52,7 +52,7 @@ def collect(root: Path, firmware_hash: str) -> dict[str, str]:
     default = read_prop(root / "vendor/default.prop")
     system = read_prop(root / "system/system/build.prop")
     target = vendor.get("ro.product.vendor.device", "")
-    if not target.startswith(("beyond0", "beyond1", "beyond2", "beyondx")):
+    if target not in {"beyond0lte", "beyond1lte", "beyond2lte", "beyondx"}:
         raise ABIError(f"Unexpected stock S10 vendor device: {target!r}")
     vendor_sdk = required_level("ro.build.version.sdk", [vendor, default], 28, 36)
     vndk = required_level("ro.vndk.version", [vendor, default], 28, 36)
