@@ -71,5 +71,17 @@ else
   bash "$ROOT/verify.sh" "$DEVICE" ||
     s10_die "ZIP verification failed; do not flash or release"
   s10_info "Static ZIP checks passed. On-device bootability is NOT verified."
-  [[ "$MODE" != "--tester-zip" ]] || s10_info "TESTER ONLY: compiled recovery ZIP, never boot-certified."
+  if [[ "$MODE" == "--tester-zip" ]]; then
+    # Make the untested status visible in the file name, not just release notes.
+    package="$(s10_package "$DEVICE")"
+    [[ "$package" != *-UNTESTED.zip ]] ||
+      s10_die "Tester artifact already marked untested; refusing ambiguous output"
+    untested="${package%.zip}-UNTESTED.zip"
+    [[ ! -e "$untested" ]] || s10_die "Existing tester artifact: $untested"
+    mv -- "$package" "$untested" || s10_die "Cannot label tester ZIP"
+    rm -f -- "$package.sha256"
+    sha256sum "$untested" > "$untested.sha256" ||
+      s10_die "Cannot checksum untested ZIP"
+    s10_info "UNTESTED TESTER ZIP: $untested"
+  fi
 fi
