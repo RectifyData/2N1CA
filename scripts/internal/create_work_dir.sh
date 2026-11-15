@@ -206,4 +206,23 @@ COPY_SOURCE_FIRMWARE
 COPY_TARGET_FIRMWARE
 COPY_TARGET_KERNEL
 
+# Test builds use a separately compiled kernel; never silently package the
+# original Android 12 stock boot.img as though it were an Android 16 port.
+if [[ "${S10_TESTER_BUILD:-false}" == "true" ]]; then
+    [[ "${TARGET_PLATFORM:-}" == "exynos9820" ]] || {
+        LOGE "E640: Tester boot injection requires Exynos9820 target"
+        exit 1
+    }
+    python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+        --target "$TARGET_CODENAME" \
+        --experimental-provenance "$S10_EXPERIMENTAL_KERNEL_PROVENANCE" \
+        --boot "$S10_EXPERIMENTAL_BOOT_IMAGE" || exit 1
+    mkdir -p "$WORK_DIR/kernel"
+    cp -- "$S10_EXPERIMENTAL_BOOT_IMAGE" "$WORK_DIR/kernel/boot.img" || exit 1
+    python3 "$SRC_DIR/scripts/internal/s10_boot_integrity.py" \
+        --target "$TARGET_CODENAME" \
+        --experimental-provenance "$S10_EXPERIMENTAL_KERNEL_PROVENANCE" \
+        --boot "$WORK_DIR/kernel/boot.img" || exit 1
+fi
+
 exit 0
